@@ -1,0 +1,70 @@
+.board {
+  @apply grid items-start;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.board-toolbar {
+  @apply flex items-baseline justify-between gap-2;
+}
+
+.board-toolbar label {
+  @apply whitespace-nowrap;
+  font-size: 0.85rem;
+}
+
+.column {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #eaf0e8;
+  min-height: 160px;
+}
+
+.column h2 {
+  margin: 2px 0 12px;
+}
+
+.column h2 span {
+  color: var(--muted);
+  margin-left: 4px;
+  font-size: 0.8rem;
+}
+
+.ticket + .ticket {
+  margin-top: 8px;
+}
+
+.ticket > small {
+  color: var(--muted);
+}
+
+.ticket h3 {
+  font-size: 0.95rem;
+  margin: 5px 0;
+}
+
+.ticket p {
+  margin: 0 0 5px;
+  font-size: 0.84rem;
+}
+
+.ticket select {
+  @apply w-full;
+  margin-top: 8px;
+  padding: 6px;
+}
+
+.ticket select {
+  @apply bg-white;
+  border: 1px solid #abc0ad;
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+@media (max-width: 870px) {
+  .board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

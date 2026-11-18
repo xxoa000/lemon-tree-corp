@@ -1,0 +1,83 @@
+:root {
+  color-scheme: light;
+  --ink: #17382c;
+  --muted: #566b61;
+  --line: #dce6dc;
+  --green: #12382d;
+  --lemon: #f3e688;
+  font-family:
+    'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  @apply m-0;
+  background: #f4f7f2;
+  color: var(--ink);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  @apply cursor-pointer;
+  color: inherit;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+button:focus-visible,
+input:focus-visible,
+summary:focus-visible,
+select:focus-visible {
+  outline: 2px solid #418465;
+  outline-offset: 3px;
+}
+
+h1 {
+  margin: 0 0 20px;
+  font-size: clamp(1.7rem, 3vw, 2.2rem);
+  letter-spacing: -0.055em;
+}
+
+h2 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+p {
+  line-height: 1.55;
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 16px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.86rem;
+  margin: 4px 0 10px;
+}
+
+.action {
+  @apply border-0 text-white;
+  background: var(--green);
+  border-radius: 7px;
+  padding: 8px 11px;
+}
+
+.error {
+  color: #922e27;
+}

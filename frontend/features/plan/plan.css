@@ -1,0 +1,23 @@
+.schedule-grid {
+  @apply grid items-start;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.schedule-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.schedule-grid details {
+  margin-top: 12px;
+}
+
+.schedule-grid summary {
+  @apply cursor-pointer;
+}
+
+@media (max-width: 870px) {
+  .schedule-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

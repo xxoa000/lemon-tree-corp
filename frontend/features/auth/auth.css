@@ -1,0 +1,16 @@
+.login-form {
+  @apply grid gap-3;
+}
+
+.login-form label {
+  @apply grid;
+  gap: 5px;
+}
+
+.login-form input {
+  @apply bg-white;
+  border: 1px solid #abc0ad;
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 8px;
+}

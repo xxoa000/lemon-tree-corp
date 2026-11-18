@@ -32,3 +32,53 @@ docker compose up --build
 - JWT, LemonTalk, Jira-like tasks, GitHub integration, actual agent runtime, approval gates, and Kubernetes are **not implemented**.
 - The invocation semantics are represented as configuration data only; no secure command router exists yet.
 - No GitHub repository, push, external deployment, or paid API call was performed.
+
+## 워크스페이스 코드리뷰
+
+로컬 리뷰 계정은 `junior`이며 업무 보드에서 LT-011의 업무를 변경할 수 있습니다.
+백엔드 디렉터리에서 의존성을 설치하고, 로컬 리뷰용 비밀번호와 JWT 서명 키를 지정한 후 서버를 실행하세요.
+
+```bash
+cd backend
+python -m pip install -r requirements.txt
+export WORKPLACE_PASSWORD="$(python -c 'import secrets; print(secrets.token_urlsafe(18))')"
+export WORKPLACE_JWT_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+python -m uvicorn app.main:app --reload
+```
+
+로컬 터미널의 `$WORKPLACE_PASSWORD` 값으로 로그인합니다. 프런트엔드는 별도 터미널에서
+`cd frontend && npm ci && npm run dev`로 실행합니다.
+업무 상태와 변경 이력은 기본적으로 `backend/.local/workplace.sqlite3`에 저장됩니다.
+다른 API 주소가 필요하면 프런트엔드의 `BACKEND_URL`을 지정하세요.
+
+## 백엔드 모듈과 DB 변경
+
+기능 코드는 `backend/app/modules/<기능>/`에 둡니다. 각 모듈은 사용 범위에 따라
+`<기능>_router.py`(API), `<기능>_schemas.py`(요청·응답),
+`<기능>_service.py`(처리 로직), `<기능>_model.py`(DB 모델)를 둡니다.
+파일과 함수의 역할은 docstring으로, 모델의 컬럼 설명은 `comment=`로 작성합니다.
+
+서버는 시작할 때 업무 SQLite 파일에 미적용 Alembic 리비전을 반영합니다.
+별도 파일에서 마이그레이션을 확인하려면 `WORKPLACE_DB_PATH`를 지정할 수 있습니다.
+
+```bash
+cd backend
+python -m alembic upgrade head
+python -m alembic check
+# 모델을 바꾼 뒤 리비전을 만들고 생성된 내용을 검토합니다.
+python -m alembic revision --autogenerate -m "describe schema change"
+```
+
+SQLite에서는 컬럼 코멘트를 테이블에 저장하지 않으므로 설명은 SQLAlchemy 모델에서 확인합니다.
+
+프런트엔드에서는 `frontend/app/`이 Next.js 경로와 전역 스타일 진입점을 맡고,
+`frontend/features/`에 화면·타입·API를 기능별로 모읍니다.
+공통 데스크톱 화면은 `frontend/desk/`, 공통 API 호출과 기본 스타일은
+`frontend/shared/`에 둡니다.
+
+양쪽에서 공통으로 쓰는 기능명은 `org`(조직), `auth`(인증과 세션),
+`task`(업무)입니다. 프런트엔드의 일정과 공고에는 `plan`, `jobs`를 사용합니다.
+새 기능명은 의미가 분명한 3~4글자를 우선합니다.
+
+스타일은 Tailwind CSS의 `@apply`를 사용해 별도 CSS 파일에 작성합니다.
+컴포넌트 전용 스타일이 필요하면 조직 화면의 `org.module.css`처럼 CSS Modules로 분리합니다.

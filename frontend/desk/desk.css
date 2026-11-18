@@ -1,0 +1,217 @@
+.workspace {
+  @apply grid;
+  grid-template-columns: 218px minmax(0, 1fr);
+  min-height: 100dvh;
+  padding-bottom: 57px;
+}
+
+.sidebar {
+  background: var(--green);
+  color: #f7faf5;
+  padding: 24px 16px;
+}
+
+.brand {
+  @apply flex items-center gap-3 border-0 bg-transparent text-left;
+  padding: 4px 10px;
+  font-size: 1.05rem;
+  font-weight: 750;
+}
+
+.brand small {
+  @apply block font-medium;
+  font-size: 0.72rem;
+  color: #c5dacf;
+}
+
+.brand-mark {
+  @apply flex-none;
+  display: inline-block;
+  width: 21px;
+  height: 15px;
+  background: var(--lemon);
+  border-radius: 68% 20% 68% 20%;
+  transform: rotate(-22deg);
+}
+
+.sidebar nav {
+  @apply grid;
+  gap: 6px;
+  margin-top: 44px;
+}
+
+.sidebar nav button {
+  @apply flex items-center gap-3 border-0 text-left;
+  background: transparent;
+  border-radius: 8px;
+  padding: 12px;
+  color: #d9e7de;
+}
+
+.sidebar nav button span {
+  @apply text-center;
+  width: 20px;
+  font-size: 1.12rem;
+}
+
+.sidebar nav button:hover,
+.sidebar nav button.selected {
+  @apply text-white;
+  background: #285141;
+}
+
+.sidebar nav button.selected span {
+  color: var(--lemon);
+}
+
+.topbar {
+  @apply flex items-center justify-between gap-3;
+  min-height: 64px;
+  border-bottom: 1px solid var(--line);
+  background: #fcfdfa;
+  padding: 8px clamp(16px, 4vw, 48px);
+  font-size: 0.88rem;
+}
+
+.slash {
+  margin: 0 8px;
+  color: #64766c;
+}
+
+.account {
+  @apply flex items-center gap-2;
+}
+
+.account button {
+  @apply bg-white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+
+.account .talk {
+  @apply grid place-items-center;
+  width: 38px;
+  height: 34px;
+  background: #fff8d7;
+}
+
+.talk .brand-mark {
+  background: #ad8410;
+  width: 16px;
+  height: 12px;
+}
+
+.content {
+  @apply m-auto;
+  max-width: 1320px;
+  padding: 30px clamp(16px, 4vw, 48px) 40px;
+}
+
+.taskbar {
+  @apply fixed bottom-0 flex items-center justify-between text-white;
+  z-index: 2;
+  inset-inline: 0;
+  height: 57px;
+  padding: 0 16px;
+  background: #0f2f26;
+}
+
+.start {
+  @apply flex items-center gap-2;
+  border: 1px solid #557569;
+  border-radius: 8px;
+  padding: 7px 11px;
+  background: #254b3e;
+}
+
+.taskbar time {
+  @apply tabular-nums;
+  font-size: 0.85rem;
+}
+
+.launcher {
+  @apply absolute bg-white grid;
+  bottom: 65px;
+  left: 12px;
+  width: 205px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 10px 28px #102c2635;
+  color: var(--ink);
+  padding: 6px;
+}
+
+.launcher button {
+  @apply bg-transparent border-0 text-left;
+  padding: 9px;
+  border-radius: 6px;
+}
+
+.launcher button:not(:disabled):hover {
+  background: #eaf0e8;
+}
+
+dialog {
+  width: min(420px, calc(100% - 32px));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 24px;
+  color: var(--ink);
+}
+
+dialog::backdrop {
+  background: #132e27a3;
+}
+
+dialog li + li {
+  margin-top: 6px;
+}
+
+.close-form {
+  float: right;
+}
+
+.close-form button {
+  @apply border-0;
+  background: transparent;
+  font-size: 1.3rem;
+}
+
+@media (max-width: 870px) {
+  .workspace {
+    grid-template-columns: 114px minmax(0, 1fr);
+  }
+  .sidebar {
+    padding-inline: 9px;
+  }
+  .brand {
+    padding-inline: 1px;
+    gap: 4px;
+    font-size: 0.84rem;
+  }
+  .brand .brand-mark {
+    width: 13px;
+    height: 10px;
+  }
+}
+@media (max-width: 520px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sidebar {
+    padding: 9px;
+  }
+  .sidebar nav {
+    display: flex;
+    margin-top: 8px;
+    justify-content: space-between;
+  }
+  .sidebar nav button {
+    padding: 7px;
+    gap: 4px;
+  }
+  .content {
+    padding-top: 20px;
+  }
+}
