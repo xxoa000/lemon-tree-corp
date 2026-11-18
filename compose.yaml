@@ -1,0 +1,37 @@
+services:
+  frontend:
+    ports:
+      - "${FRONT_PORT}:3000"
+  backend:
+    build: ./backend
+    ports:
+      - "${BACK_PORT}:8000"
+    environment:
+      DATABASE_URL: mysql+pymysql://${MYSQL_DATABASE}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_USER}
+      REDIS_URL: redis://${REDIS_PORT}:6379/0
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+  mysql:
+    ports:
+      - "${MYSQL_PORT}:3306"
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      retries: 15
+  redis:
+    ports:
+      - "${REDIS_PORT}:6379"
+    image: redis:7-alpine
+volumes:
+  mysql_data:

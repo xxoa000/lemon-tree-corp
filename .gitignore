@@ -1,0 +1,16 @@
+# ------------------------------------------ Frontend
+node_modules/
+.next/
+
+# ------------------------------------------ Backend
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ------------------------------------------ 보안 관련 설정
+.env
+.env.*
+!.env.example
