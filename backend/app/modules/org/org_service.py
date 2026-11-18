@@ -13,7 +13,6 @@ EMPLOYEES = [
     Employee(id="LT-008", name="정하은", team="인프라팀", rank="차장", job_title="Senior QA Engineer / 인프라팀장", specialty="QA·자동화 테스트"),
     Employee(id="LT-009", name="오태민", team="인프라팀", rank="과장", job_title="Senior DevOps Engineer", specialty="Docker·Kubernetes·CI/CD"),
     Employee(id="LT-010", name="서지안", team="개발팀", rank="대리", job_title="AI / LLM Engineer", specialty="LLM·RAG·AI Agent"),
-    Employee(id="LT-011", name="사용자", team="개발팀", rank="사원", job_title="Junior Backend Engineer", specialty="API·테스트·기술 학습", is_ai=False),
 ]
 
 
@@ -25,7 +24,7 @@ def teams() -> list[dict[str, object]]:
     """팀별 리더와 구성원의 식별자를 반환합니다."""
     return [
         {"name": "디자인팀", "leader_id": "LT-003", "member_ids": ["LT-003", "LT-007"]},
-        {"name": "개발팀", "leader_id": "LT-002", "member_ids": ["LT-002", "LT-004", "LT-005", "LT-006", "LT-010", "LT-011"]},
+        {"name": "개발팀", "leader_id": "LT-002", "member_ids": ["LT-002", "LT-004", "LT-005", "LT-006", "LT-010"]},
         {"name": "인프라팀", "leader_id": "LT-008", "member_ids": ["LT-008", "LT-009"]},
     ]
 

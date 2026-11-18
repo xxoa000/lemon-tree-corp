@@ -13,7 +13,7 @@ from .auth_model import Account
 from .auth_service import password_hash, recovery_hash
 
 
-def provision(engine: Engine, employee_id: str, password: str) -> str:
+def provision(engine: Engine, employee_id: str, password: str) -> tuple[str, str]:
     """조직 구성원 계정의 자격 증명을 설정하고 기존 세션을 폐기합니다."""
     if not 10 <= len(password) <= 256:
         raise ValueError("비밀번호는 10~256자여야 합니다.")
@@ -33,7 +33,8 @@ def provision(engine: Engine, employee_id: str, password: str) -> str:
         account.password_hash = encoded
         account.recovery_hash = recovery_hash(code)
         account.session_version += 1
-    return code
+        username = account.username
+    return username, code
 
 
 def main() -> int:
@@ -47,13 +48,13 @@ def main() -> int:
         return 1
     engine = create_workplace_engine()
     try:
-        code = provision(engine, args.employee_id, password)
+        username, code = provision(engine, args.employee_id, password)
     except ValueError as error:
         print(error)
         return 1
     finally:
         engine.dispose()
-    print(f"아이디: staff:{args.employee_id.lower()}\n복구 코드: {code}")
+    print(f"아이디: {username}\n복구 코드: {code}")
     return 0
 
 

@@ -68,8 +68,12 @@ def verify_recovery(
     """가입 이메일과 복구 코드가 일치하는 계정을 확인합니다."""
     query = select(Account).where(Account.email == data.email.lower())
     account = db.scalar(query.with_for_update() if for_update else query)
-    if not account or not hmac.compare_digest(
-        account.recovery_hash, recovery_hash(data.recovery_code)
+    if (
+        not account
+        or not account.recovery_hash
+        or not hmac.compare_digest(
+            account.recovery_hash, recovery_hash(data.recovery_code)
+        )
     ):
         raise HTTPException(400, "이메일 또는 복구 코드를 확인해 주세요.")
     return account
@@ -109,13 +113,14 @@ def issue_token(engine: Engine, credentials: Login) -> tuple[str, str]:
     else:
         with Session(engine) as db:
             account = db.scalar(select(Account).where(Account.username == username))
-            salt = (
-                bytes.fromhex(account.password_hash.split(":")[0])
-                if account and account.password_hash != "!"
-                else bytes(16)
-            )
+            encoded = account.password_hash if account else None
+            salt = bytes.fromhex(encoded.split(":")[0]) if encoded else bytes(16)
             candidate = password_hash(credentials.password, salt)
-            if not account or not hmac.compare_digest(candidate, account.password_hash):
+            if (
+                not account
+                or not encoded
+                or not hmac.compare_digest(candidate, encoded)
+            ):
                 raise HTTPException(401, "아이디 또는 비밀번호를 확인해 주세요.")
             subject = f"acct:{account.id}"
             version = account.session_version
@@ -147,7 +152,7 @@ def authenticated_employee(engine: Engine, token: str | None) -> str:
             subject = claims["sub"]
             if subject == EMPLOYEE_ID:
                 return EMPLOYEE_ID
-            if subject.startswith("acct:") and subject[5:].removeprefix("-").isdigit():
+            if subject.startswith("acct:") and subject[5:].isdigit():
                 with Session(engine) as db:
                     account = db.get(Account, int(subject[5:]))
                     if account and claims.get("ver") == account.session_version:

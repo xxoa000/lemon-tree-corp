@@ -57,12 +57,77 @@ def load_source(path: Path) -> dict[str, list[dict]]:
     return source
 
 
+def remap_seeded_accounts(
+    db: Connection, table: Table, source: dict[str, list[dict]]
+) -> dict[str, list[dict]]:
+    """시드 행이 차지한 ID의 충돌을 피하고 해당 지원 기록의 소유권을 보존합니다."""
+    staff_names = import_module(
+        "migrations.versions.0005_staff_identity"
+    ).STAFF_USERNAMES
+    target = {row["id"]: row for row in db.execute(select(table)).mappings()}
+    by_employee = {
+        row["employee_id"]: row for row in target.values() if row["employee_id"]
+    }
+    by_username = {row["username"]: row for row in target.values()}
+    next_id = max([0, *target, *(row["id"] for row in source["accounts"])]) + 1
+    mapping: dict[str, str] = {}
+    accounts = []
+    applicants = {row["applicant"] for row in source["job_applications"]}
+    for original in source["accounts"]:
+        row = dict(original)
+        old_id = row["id"]
+        employee_id = row.get("employee_id")
+        if employee_id == "LT-011" and employee_id not in by_employee:
+            if not (
+                row["password_hash"] not in (None, "!")
+                or row["recovery_hash"] not in (None, "!")
+                or f"acct:{old_id}" in applicants
+            ):
+                continue
+            row.update(employee_id=None, username="staff:lt-011")
+            if row.get("display_name") == "사용자":
+                row["display_name"] = ""
+            employee_id = None
+            if old_id < 0:
+                row["session_version"] += 1
+        if employee_id:
+            registered = by_employee.get(employee_id)
+            if registered is None or employee_id not in staff_names:
+                raise ValueError("대상 DB에 연결할 직원 시드가 없습니다.")
+            row.update(id=registered["id"], username=staff_names[employee_id])
+            if old_id < 0:
+                row["session_version"] += 1
+        elif row["username"] in by_username:
+            row["id"] = by_username[row["username"]]["id"]
+        elif old_id < 0 or (old_id in target and target[old_id]["employee_id"]):
+            row["id"] = next_id
+            next_id += 1
+        for key in ("password_hash", "recovery_hash"):
+            if row[key] == "!":
+                row[key] = None
+        if row["id"] != old_id:
+            mapping[f"acct:{old_id}"] = f"acct:{row['id']}"
+        accounts.append(row)
+
+    if len({row["id"] for row in accounts}) != len(accounts):
+        raise ValueError("여러 원본 계정이 같은 대상 계정으로 연결됩니다.")
+    applications = [
+        {**row, "applicant": mapping.get(row["applicant"], row["applicant"])}
+        for row in source["job_applications"]
+    ]
+    if mapping:
+        print(
+            f"시드와 충돌하거나 이름이 변경된 계정 ID {len(mapping)}개를 연결했습니다."
+        )
+    return {**source, "accounts": accounts, "job_applications": applications}
+
+
 def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> None:
     """식별자와 제약 조건을 확인하고 적용 모드에서만 대상에 씁니다."""
     revision = db.scalar(text("SELECT version_num FROM alembic_version"))
-    if revision not in {"0003", "0004"}:
+    if revision not in {"0003", "0004", "0005", "0006"}:
         raise ValueError(
-            "대상 MySQL에 지원하는 Alembic 리비전(0003 또는 0004)을 먼저 적용하세요."
+            "대상 MySQL에 지원하는 Alembic 리비전(0003~0006)을 먼저 적용하세요."
         )
 
     metadata = MetaData()
@@ -78,6 +143,9 @@ def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> Non
     if any(engines.get(name) != "InnoDB" for name in TABLES):
         raise ValueError("대상 업무 테이블이 모두 InnoDB여야 합니다.")
 
+    if revision in {"0005", "0006"}:
+        source = remap_seeded_accounts(db, tables["accounts"], source)
+
     task_events = tables["task_events"]
     changed_tasks = set(db.scalars(select(task_events.c.task_id)))
     for name, table in tables.items():
@@ -88,7 +156,13 @@ def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> Non
         skipped = 0
         for original in source[name]:
             row = original
-            if name == "accounts" and revision == "0004":
+            if (
+                name == "tasks"
+                and revision == "0006"
+                and row["assignee_id"] == "LT-011"
+            ):
+                row = {**row, "assignee_id": ""}
+            if name == "accounts" and revision in {"0004", "0005", "0006"}:
                 row = {
                     "role": "member",
                     "employee_id": None,
@@ -104,6 +178,9 @@ def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> Non
                 )
             key = row["id"]
             current = existing.get(key)
+            seed = SEED_ROWS.get(key) if name == "tasks" else None
+            if seed and revision == "0006" and seed["assignee_id"] == "LT-011":
+                seed = {**seed, "assignee_id": ""}
             if current == row:
                 skipped += 1
             elif current is None:
@@ -130,14 +207,10 @@ def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> Non
                         f"{name}: 대상 DB의 고유값이 충돌합니다. 이전을 중단합니다."
                     )
                 inserted.append(row)
-            elif (
-                name == "tasks"
-                and current == SEED_ROWS.get(key)
-                and key not in changed_tasks
-            ) or (
+            elif (name == "tasks" and current == seed and key not in changed_tasks) or (
                 name == "accounts"
-                and key < 0
-                and current["password_hash"] == "!"
+                and current.get("employee_id") is not None
+                and current["password_hash"] in (None, "!")
                 and all(
                     current[field] == row[field]
                     for field in ("employee_id", "username", "role")

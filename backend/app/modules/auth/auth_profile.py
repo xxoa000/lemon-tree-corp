@@ -129,7 +129,7 @@ def list_staff(engine: Engine, subject: str) -> list[StaffAccount]:
                 username=row.username,
                 display_name=row.display_name,
                 role=row.role,
-                enabled=row.password_hash != "!",
+                enabled=row.password_hash is not None,
             )
             for row in rows
             if row.employee_id is not None

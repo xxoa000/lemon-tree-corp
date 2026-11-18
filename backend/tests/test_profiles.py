@@ -78,12 +78,13 @@ def test_staff_admin_seed(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKPLACE_DB_PATH", str(tmp_path / "staff.sqlite3"))
     monkeypatch.setenv("WORKPLACE_JWT_SECRET", "local-test-only-32-byte-signing-secret")
     with TestClient(app) as client:
-        credentials = {"username": "staff:lt-sys-001", "password": PASSWORD}
+        credentials = {"username": "seoyun", "password": PASSWORD}
         assert client.post("/api/v1/session", json=credentials).status_code == 401
         engine = create_workplace_engine()
         try:
-            assert len(provision(engine, "LT-SYS-001", PASSWORD)) >= 20
-            provision(engine, "LT-011", PASSWORD)
+            username, code = provision(engine, "LT-SYS-001", PASSWORD)
+            assert username == "seoyun" and len(code) >= 20
+            provision(engine, "LT-005", PASSWORD)
         finally:
             engine.dispose()
 
@@ -91,19 +92,19 @@ def test_staff_admin_seed(tmp_path, monkeypatch):
         assert result["role"] == "admin"
         assert result["org_employee_id"] == "LT-SYS-001"
         staff = client.get("/api/v1/accounts/staff").json()
-        assert len(staff) == 12
+        assert len(staff) == 11
         assert [row["employee_id"] for row in staff if row["role"] == "admin"] == [
             "LT-SYS-001"
         ]
         assert client.get("/api/v1/accounts/me").json()["display_name"] == "백서윤"
         assert (
             client.post(
-                "/api/v1/session", json={**credentials, "username": "staff:lt-011"}
+                "/api/v1/session", json={**credentials, "username": "yuri"}
             ).json()["role"]
             == "member"
         )
         assert (
-            client.patch("/api/v1/tasks/LT-21", json={"status": "done"}).status_code
+            client.patch("/api/v1/tasks/LT-19", json={"status": "done"}).status_code
             == 200
         )
         assert client.get("/api/v1/accounts/staff").status_code == 403

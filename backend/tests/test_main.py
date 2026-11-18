@@ -4,22 +4,28 @@ from app.main import app
 
 client = TestClient(app)
 
-def test_health():
-    assert client.get('/health').json() == {'status': 'ok'}
 
-def test_org_has_eleven_members():
-    assert len(client.get('/api/v1/employees').json()) == 11
+def test_health():
+    assert client.get("/health").json() == {"status": "ok"}
+
+
+def test_org_has_ten_members():
+    assert len(client.get("/api/v1/employees").json()) == 10
+
 
 def test_three_teams_and_all_members():
-    teams = client.get('/api/v1/teams').json()
+    teams = client.get("/api/v1/teams").json()
     assert len(teams) == 3
-    assert sum(len(team['member_ids']) for team in teams) == 10  # CEO is outside the three teams
+    assert (
+        sum(len(team["member_ids"]) for team in teams) == 9
+    )  # CEO is outside the three teams
+
 
 def test_manager_is_external_and_has_rank():
-    manager = client.get('/api/v1/control-center/manager').json()
-    assert manager['rank'] == '부장'
-    assert manager['external_to_org'] is True
-    assert manager['invocation_semantics'] == 'OWNER_DESIGN_REQUEST'
+    manager = client.get("/api/v1/control-center/manager").json()
+    assert manager["rank"] == "부장"
+    assert manager["external_to_org"] is True
+    assert manager["invocation_semantics"] == "OWNER_DESIGN_REQUEST"
 
 
 def test_task_status_requires_ownership_and_survives_new_request(tmp_path, monkeypatch):
@@ -32,20 +38,36 @@ def test_task_status_requires_ownership_and_survives_new_request(tmp_path, monke
 
     with TestClient(app) as reviewer:
         assert reviewer.patch("/api/v1/tasks/LT-21", json=update).status_code == 401
-        assert reviewer.post("/api/v1/session", json={
-            "username": "junior", "password": "wrong",
-        }).status_code == 401
-        login_response = reviewer.post("/api/v1/session", json={
-            "username": "junior", "password": "local-test-password",
-        })
-        assert login_response.json() == {"employee_id": "LT-011", "org_employee_id": "LT-011", "role": "member"}
+        assert (
+            reviewer.post(
+                "/api/v1/session",
+                json={
+                    "username": "junior",
+                    "password": "wrong",
+                },
+            ).status_code
+            == 401
+        )
+        login_response = reviewer.post(
+            "/api/v1/session",
+            json={
+                "username": "junior",
+                "password": "local-test-password",
+            },
+        )
+        assert login_response.json() == {
+            "employee_id": "LT-011",
+            "org_employee_id": "LT-011",
+            "role": "member",
+        }
         assert "httponly" in login_response.headers["set-cookie"].lower()
         assert reviewer.patch("/api/v1/tasks/LT-22", json=update).status_code == 403
-        assert reviewer.patch("/api/v1/tasks/LT-21", json=update).json()["status"] == "done"
+        assert reviewer.patch("/api/v1/tasks/LT-21", json=update).status_code == 403
         assert reviewer.delete("/api/v1/session").status_code == 204
         assert reviewer.get("/api/v1/session").status_code == 401
 
     with TestClient(app) as after_reload:
         tasks = {task["id"]: task for task in after_reload.get("/api/v1/tasks").json()}
-        assert tasks["LT-21"]["status"] == "done"
+        assert tasks["LT-21"]["status"] == "todo"
+        assert tasks["LT-21"]["assignee_id"] == ""
         assert tasks["LT-22"]["status"] == "todo"

@@ -60,8 +60,10 @@ export function Board({
                     <small>{task.id}</small>
                     <h3>{task.title}</h3>
                     <p>{task.description}</p>
-                    {employee && (
+                    {employee ? (
                       <Person employee={employee} onSelect={onSelect} />
+                    ) : (
+                      <p>미배정</p>
                     )}
                     {task.assignee_id === employeeId && (
                       <select
