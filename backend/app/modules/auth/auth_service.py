@@ -62,7 +62,9 @@ def signup(engine: Engine, data: Signup) -> str:
     return code
 
 
-def verify_recovery(db: Session, data: Recovery, *, for_update: bool = False) -> Account:
+def verify_recovery(
+    db: Session, data: Recovery, *, for_update: bool = False
+) -> Account:
     """가입 이메일과 복구 코드가 일치하는 계정을 확인합니다."""
     query = select(Account).where(Account.email == data.email.lower())
     account = db.scalar(query.with_for_update() if for_update else query)
@@ -109,7 +111,7 @@ def issue_token(engine: Engine, credentials: Login) -> tuple[str, str]:
             account = db.scalar(select(Account).where(Account.username == username))
             salt = (
                 bytes.fromhex(account.password_hash.split(":")[0])
-                if account
+                if account and account.password_hash != "!"
                 else bytes(16)
             )
             candidate = password_hash(credentials.password, salt)
@@ -145,7 +147,7 @@ def authenticated_employee(engine: Engine, token: str | None) -> str:
             subject = claims["sub"]
             if subject == EMPLOYEE_ID:
                 return EMPLOYEE_ID
-            if subject.startswith("acct:") and subject[5:].isdigit():
+            if subject.startswith("acct:") and subject[5:].removeprefix("-").isdigit():
                 with Session(engine) as db:
                     account = db.get(Account, int(subject[5:]))
                     if account and claims.get("ver") == account.session_version:

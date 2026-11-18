@@ -1,8 +1,5 @@
 import type { Employee, Team } from './org-api';
-import careers from './careers.json';
 import styles from './org.module.css';
-
-const careerHistory: Record<string, string[]> = careers;
 
 function Avatar({ employee }: { employee: Employee }) {
   const index =
@@ -110,16 +107,6 @@ export function Profile({ profile }: { profile: Employee }) {
         {profile.team} · {profile.job_title}
       </p>
       <p>{profile.specialty}</p>
-      <h3>주요 이력</h3>
-      {careerHistory[profile.id] ? (
-        <ol>
-          {careerHistory[profile.id].map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ol>
-      ) : (
-        <p>등록된 이력이 없습니다.</p>
-      )}
     </>
   );
 }

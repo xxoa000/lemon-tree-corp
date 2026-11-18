@@ -38,7 +38,7 @@ def test_task_status_requires_ownership_and_survives_new_request(tmp_path, monke
         login_response = reviewer.post("/api/v1/session", json={
             "username": "junior", "password": "local-test-password",
         })
-        assert login_response.json() == {"employee_id": "LT-011"}
+        assert login_response.json() == {"employee_id": "LT-011", "org_employee_id": "LT-011", "role": "member"}
         assert "httponly" in login_response.headers["set-cookie"].lower()
         assert reviewer.patch("/api/v1/tasks/LT-22", json=update).status_code == 403
         assert reviewer.patch("/api/v1/tasks/LT-21", json=update).json()["status"] == "done"

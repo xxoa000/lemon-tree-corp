@@ -1,11 +1,21 @@
 """JWT 쿠키를 사용하는 로그인, 세션 조회, 로그아웃 경로를 등록합니다."""
 
 import os
+from typing import Annotated
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
 
-from . import auth_service
-from .auth_schemas import Login, Recovery, Reset, Session, Signup
+from . import auth_profile, auth_service
+from .auth_schemas import (
+    AccountProfile,
+    Login,
+    ProfileUpdate,
+    Recovery,
+    Reset,
+    Session,
+    Signup,
+    StaffAccount,
+)
 
 router = APIRouter(prefix="/api/v1")
 COOKIE = "lemontree_session"
@@ -33,14 +43,16 @@ def login(credentials: Login, response: Response, request: Request) -> Session:
         samesite="strict",
         secure=os.getenv("WORKPLACE_SECURE_COOKIE") == "1",
     )
-    return Session(employee_id=subject)
+    return auth_profile.session_view(request.app.state.workplace_engine, subject)
 
 
 @router.get("/session")
 def session(request: Request, response: Response) -> Session:
     """현재 세션에 연결된 직원 식별자를 응답합니다."""
     response.headers["Cache-Control"] = "no-store"
-    return Session(employee_id=session_employee(request))
+    return auth_profile.session_view(
+        request.app.state.workplace_engine, session_employee(request)
+    )
 
 
 @router.delete("/session", status_code=204)
@@ -79,3 +91,58 @@ def reset_password(data: Reset, request: Request, response: Response) -> dict[st
             request.app.state.workplace_engine, data
         )
     }
+
+
+Subject = Annotated[str, Depends(session_employee)]
+
+
+def task_employee(request: Request, subject: Subject) -> str:
+    """업무 권한에 사용할 조직 식별자를 확인합니다."""
+    return (
+        auth_profile.session_view(
+            request.app.state.workplace_engine, subject
+        ).org_employee_id
+        or subject
+    )
+
+
+@router.get("/accounts/me")
+def profile(request: Request, response: Response, subject: Subject) -> AccountProfile:
+    """내 마이페이지에 표시할 정보를 반환합니다."""
+    response.headers["Cache-Control"] = "private, no-store"
+    return auth_profile.read_profile(request.app.state.workplace_engine, subject)
+
+
+@router.patch("/accounts/me")
+def update_profile(
+    data: ProfileUpdate, request: Request, subject: Subject
+) -> AccountProfile:
+    """로그인한 계정의 회원정보를 수정합니다."""
+    return auth_profile.update_profile(
+        request.app.state.workplace_engine, subject, data
+    )
+
+
+@router.get("/accounts/me/avatar")
+def avatar(request: Request, subject: Subject) -> Response:
+    """내 프로필 이미지를 반환합니다."""
+    return Response(
+        auth_profile.read_avatar(request.app.state.workplace_engine, subject),
+        media_type="image/webp",
+        headers={"Cache-Control": "private, no-store"},
+    )
+
+
+@router.put("/accounts/me/avatar", status_code=204)
+def update_avatar(
+    request: Request, subject: Subject, image: Annotated[UploadFile, File()]
+) -> None:
+    """내 프로필 이미지를 검사 후 교체합니다."""
+    auth_profile.update_avatar(request.app.state.workplace_engine, subject, image)
+
+
+@router.get("/accounts/staff")
+def staff(request: Request, response: Response, subject: Subject) -> list[StaffAccount]:
+    """관리자에게 직원 계정 목록을 제공합니다."""
+    response.headers["Cache-Control"] = "private, no-store"
+    return auth_profile.list_staff(request.app.state.workplace_engine, subject)

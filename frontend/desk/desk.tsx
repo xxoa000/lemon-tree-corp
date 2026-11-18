@@ -8,6 +8,7 @@ import {
   getSession,
   type Session,
 } from '../features/auth/auth-api';
+import { MyPage } from '../features/mypg/mypg';
 import { Jobs } from '../features/jobs/jobs';
 import { Org, Profile } from '../features/org/org';
 import {
@@ -38,6 +39,7 @@ export default function Workspace() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Employee | null>(null);
+  const [myPageOpen, setMyPageOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
   const [mine, setMine] = useState(false);
@@ -81,6 +83,7 @@ export default function Workspace() {
     setMine(onlyMine);
     setProfile(null);
     setLoginOpen(false);
+    setMyPageOpen(false);
     setStartOpen(false);
     setError('');
   }
@@ -105,6 +108,7 @@ export default function Workspace() {
     try {
       await deleteSession();
       setSession(null);
+      setMyPageOpen(false);
       setMine(false);
       setProfile(null);
     } catch (error) {
@@ -166,15 +170,21 @@ export default function Workspace() {
             </button>
             {session ? (
               <>
-                {people.has(session.employee_id) && (
-                  <button
-                    onClick={() => {
-                      const person = people.get(session.employee_id);
-                      if (person) setProfile(person);
-                    }}
-                  >
+                {session.employee_id.startsWith('acct:') ? (
+                  <button onClick={() => setMyPageOpen(true)}>
                     마이페이지
                   </button>
+                ) : (
+                  people.has(session.employee_id) && (
+                    <button
+                      onClick={() => {
+                        const person = people.get(session.employee_id);
+                        if (person) setProfile(person);
+                      }}
+                    >
+                      마이페이지
+                    </button>
+                  )
                 )}
                 <button onClick={logout}>로그아웃</button>
               </>
@@ -219,7 +229,7 @@ export default function Workspace() {
             <Board
               tasks={tasks}
               people={people}
-              employeeId={session?.employee_id}
+              employeeId={session?.org_employee_id ?? undefined}
               mine={mine}
               busy={busy}
               onMine={setMine}
@@ -268,12 +278,13 @@ export default function Workspace() {
           })}
         </time>
       </footer>
-      {(profile || loginOpen) && (
+      {(profile || loginOpen || myPageOpen) && (
         <dialog
           ref={(element) => {
             if (element && !element.open) element.showModal();
           }}
           onClose={() => {
+            setMyPageOpen(false);
             setProfile(null);
             setLoginOpen(false);
           }}
@@ -284,6 +295,8 @@ export default function Workspace() {
           </form>
           {loginOpen ? (
             <Login login={login} error={error} busy={busy} />
+          ) : myPageOpen ? (
+            <MyPage />
           ) : (
             profile && <Profile profile={profile} />
           )}

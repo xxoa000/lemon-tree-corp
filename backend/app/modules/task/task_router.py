@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, Request, Response
 
-from app.modules.auth.auth_router import session_employee
+from app.modules.auth.auth_router import task_employee
 
 from . import task_service
 from .task_schemas import TaskResponse, TaskUpdate
@@ -19,9 +19,15 @@ def tasks(request: Request, response: Response) -> list[TaskResponse]:
 
 @router.patch("/tasks/{task_id}")
 def update_task(
-    task_id: str, update: TaskUpdate, request: Request, employee_id: str = Depends(session_employee),
+    task_id: str,
+    update: TaskUpdate,
+    request: Request,
+    employee_id: str = Depends(task_employee),
 ) -> TaskResponse:
     """인증된 담당자의 업무 상태 변경 요청을 처리합니다."""
     return task_service.update_status(
-        request.app.state.workplace_engine, task_id, employee_id, update.status,
+        request.app.state.workplace_engine,
+        task_id,
+        employee_id,
+        update.status,
     )

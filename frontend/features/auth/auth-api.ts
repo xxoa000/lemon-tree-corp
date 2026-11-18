@@ -1,6 +1,11 @@
 import { json, request } from '../../shared/api';
 
-export type Session = { employee_id: string };
+export type Role = 'member' | 'admin';
+export type Session = {
+  employee_id: string;
+  org_employee_id: string | null;
+  role: Role;
+};
 
 export const getSession = () => request<Session>('session');
 export const createSession = (credentials: object) =>

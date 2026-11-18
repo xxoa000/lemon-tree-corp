@@ -124,3 +124,43 @@ Uvicorn을 Mac에서 직접 실행한다면 같은 터미널에 `MYSQL_HOST=127.
 그 상태에서 `backend/`의 `python -m alembic upgrade head`와 Uvicorn이 같은 DB에 연결됩니다.
 `DATABASE_URL`이 있으면 우선 사용하며, 두 연결 설정이 모두 없으면 기존 로컬 SQLite를 사용합니다.
 SQLite에 저장된 계정·지원·업무 데이터는 MySQL로 자동 복사되지 않습니다.
+
+### 기존 SQLite 데이터 가져오기
+
+대상 MySQL에 Alembic `0003` 또는 `0004`가 적용돼 있어야 합니다. 이전 백엔드에서 저장한 SQLite
+백업을 준비하고, 프로젝트 루트에서 아래 명령을 실행합니다. `backup`은 실제 백업 파일
+경로로 바꿉니다.
+
+```bash
+backup="$PWD/backend/.local/workplace-backup.sqlite3"
+docker compose run --rm --no-deps -T \
+  -v "$PWD/backend/tools/import_sqlite.py:/app/import_sqlite.py:ro" \
+  -v "$backup:/tmp/source.sqlite3:ro" \
+  backend python /app/import_sqlite.py /tmp/source.sqlite3
+```
+
+기본 실행은 계획과 충돌 여부만 표시합니다. 계획을 확인하면 백엔드를 잠시 중지하고,
+위 명령의 마지막에 `--apply`를 붙여 복사한 뒤 백엔드를 다시 시작합니다.
+기존 업무 상태·이력, 계정, 지원 및 답변의 식별자를 유지합니다. 변경되지 않은 초기
+업무는 SQLite 값으로 갱신할 수 있으며, 다른 데이터와 식별자나 고유값이 충돌하면
+이번 가져오기를 취소합니다. SQLite 백업 파일은 읽기 전용으로 엽니다.
+
+### 직원 계정과 마이페이지
+
+Alembic `0004`는 기존 가입 정보를 보존하고 조직 구성원 11명과 외부 관리자 백서윤
+계정을 등록합니다. 백서윤은 `admin`, 나머지와 신규 가입 계정은 사원(`member`)입니다.
+시드 계정에는 공통 비밀번호가 없으며, 사용할 계정만 운영자가 다음 명령으로 활성화합니다.
+
+```bash
+docker compose exec backend python -m app.modules.auth.auth_seed LT-SYS-001
+```
+
+명령에 입력한 비밀번호와 출력된 복구 코드를 안전하게 보관하세요. 로그인 아이디는
+`staff:lt-sys-001`입니다. 일반 직원은 사번에 맞춰 명령을 실행하며, 예를 들어
+`LT-004`의 아이디는 `staff:lt-004`입니다. 같은 명령을 다시 실행하면 해당 계정의
+비밀번호와 복구 코드가 교체되고 이전 세션이 무효화됩니다.
+
+로그인한 가입·직원 계정은 마이페이지에서 이름, 이메일, 전화번호, 자기소개와 프로필 사진을
+수정할 수 있습니다. 직원 계정은 처음 로그인한 뒤 복구에 사용할 이메일을 등록하세요.
+사진은 JPEG·PNG·WebP(최대 5MB)를 받고 WebP로 저장합니다. 관리자는 직원 계정의 활성 상태도
+확인할 수 있습니다.
