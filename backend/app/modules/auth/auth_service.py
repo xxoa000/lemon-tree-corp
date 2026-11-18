@@ -8,9 +8,11 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 from fastapi import HTTPException
-from sqlalchemy import Engine, select, text
+from sqlalchemy import Engine, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
+from app.database import lock_sqlite_write
 
 from .auth_model import Account
 from .auth_schemas import Login, Recovery, Reset, Signup
@@ -60,9 +62,10 @@ def signup(engine: Engine, data: Signup) -> str:
     return code
 
 
-def verify_recovery(db: Session, data: Recovery) -> Account:
+def verify_recovery(db: Session, data: Recovery, *, for_update: bool = False) -> Account:
     """가입 이메일과 복구 코드가 일치하는 계정을 확인합니다."""
-    account = db.scalar(select(Account).where(Account.email == data.email.lower()))
+    query = select(Account).where(Account.email == data.email.lower())
+    account = db.scalar(query.with_for_update() if for_update else query)
     if not account or not hmac.compare_digest(
         account.recovery_hash, recovery_hash(data.recovery_code)
     ):
@@ -81,8 +84,8 @@ def reset_password(engine: Engine, data: Reset) -> str:
     code = secrets.token_urlsafe(24)
     new_hash = password_hash(data.password, secrets.token_bytes(16))
     with Session(engine) as db, db.begin():
-        db.execute(text("BEGIN IMMEDIATE"))
-        account = verify_recovery(db, data)
+        lock_sqlite_write(db)
+        account = verify_recovery(db, data, for_update=True)
         account.password_hash = new_hash
         account.recovery_hash = recovery_hash(code)
         account.session_version += 1

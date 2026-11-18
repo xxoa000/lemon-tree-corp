@@ -6,8 +6,10 @@ from pathlib import PurePath
 from fastapi import HTTPException, UploadFile
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
-from sqlalchemy import Engine, select, text
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
+
+from app.database import lock_sqlite_write
 
 from .jobs_model import Application, InterviewAnswer
 from .jobs_roles import AI, FRONTEND, FULLSTACK
@@ -195,7 +197,7 @@ def application_view(db: Session, row: Application) -> ApplicationView:
         filename=row.filename,
         stage=row.stage,
         feedback=row.feedback,
-        created_at=row.created_at,
+        created_at=str(row.created_at),
         question=question,
     )
 
@@ -257,8 +259,8 @@ def submit_answer(
     if not answer:
         raise HTTPException(422, "답변을 입력해 주세요.")
     with Session(engine) as db, db.begin():
-        db.execute(text("BEGIN IMMEDIATE"))
-        row = db.get(Application, application_id)
+        lock_sqlite_write(db)
+        row = db.get(Application, application_id, with_for_update=True)
         if row is None or row.applicant != applicant:
             raise HTTPException(404, "지원 정보를 찾을 수 없습니다.")
         question = application_view(db, row).question

@@ -15,7 +15,7 @@ def upgrade() -> None:
         "job_applications",
         sa.Column(
             "role",
-            sa.Text(),
+            sa.Text().with_variant(sa.String(20), "mysql"),
             nullable=False,
             server_default="backend",
             comment="지원한 공고의 직무 코드",

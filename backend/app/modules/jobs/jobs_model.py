@@ -1,6 +1,15 @@
 """지원 건과 면접 답변을 영속화하는 모델입니다."""
 
-from sqlalchemy import ForeignKey, Integer, Text, UniqueConstraint, text
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -13,17 +22,23 @@ class Application(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, comment="지원 건 식별자")
     applicant: Mapped[str] = mapped_column(
-        Text, index=True, comment="지원자 세션 식별자"
+        Text().with_variant(String(40), "mysql"),
+        index=True,
+        comment="지원자 세션 식별자",
     )
     role: Mapped[str] = mapped_column(
-        Text, server_default="backend", comment="지원한 공고의 직무 코드"
+        Text().with_variant(String(20), "mysql"),
+        server_default="backend",
+        comment="지원한 공고의 직무 코드",
     )
     filename: Mapped[str] = mapped_column(Text, comment="제출한 이력서 파일명")
-    resume: Mapped[str] = mapped_column(Text, comment="이력서에서 추출한 텍스트")
+    resume: Mapped[str] = mapped_column(
+        Text().with_variant(MEDIUMTEXT(), "mysql"), comment="이력서에서 추출한 텍스트"
+    )
     stage: Mapped[str] = mapped_column(Text, comment="지원 건의 현재 전형")
     feedback: Mapped[str] = mapped_column(Text, comment="최근 전형의 결과 및 피드백")
     created_at: Mapped[str] = mapped_column(
-        Text,
+        Text().with_variant(DateTime(), "mysql"),
         server_default=text("CURRENT_TIMESTAMP"),
         comment="지원 접수 시각(UTC)",
     )
@@ -40,6 +55,8 @@ class InterviewAnswer(Base):
         ForeignKey("job_applications.id"),
         comment="응답이 속한 지원 건 식별자",
     )
-    question_id: Mapped[str] = mapped_column(Text, comment="응답 대상 질문 식별자")
+    question_id: Mapped[str] = mapped_column(
+        Text().with_variant(String(30), "mysql"), comment="응답 대상 질문 식별자"
+    )
     answer: Mapped[str] = mapped_column(Text, comment="지원자가 입력한 면접 답변")
     score: Mapped[int] = mapped_column(Integer, comment="질문 평가 기준의 충족 개수")

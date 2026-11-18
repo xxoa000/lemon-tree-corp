@@ -1,14 +1,17 @@
 services:
-  frontend:
-    ports:
-      - "${FRONT_PORT}:3000"
   backend:
     build: ./backend
     ports:
       - "${BACK_PORT}:8000"
     environment:
-      DATABASE_URL: mysql+pymysql://${MYSQL_DATABASE}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_USER}
-      REDIS_URL: redis://${REDIS_PORT}:6379/0
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      REDIS_URL: redis://redis:6379/0
+      WORKPLACE_JWT_SECRET: ${WORKPLACE_JWT_SECRET:-}
+      WORKPLACE_PASSWORD: ${WORKPLACE_PASSWORD:-}
     depends_on:
       mysql:
         condition: service_healthy
@@ -26,7 +29,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --silent"]
       interval: 5s
       retries: 15
   redis:

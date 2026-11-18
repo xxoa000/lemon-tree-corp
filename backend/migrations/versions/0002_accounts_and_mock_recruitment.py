@@ -6,6 +6,7 @@ Revises: 0001
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 
 revision = "0002"
 down_revision = "0001"
@@ -19,8 +20,18 @@ def upgrade() -> None:
     op.create_table(
         "accounts",
         sa.Column("id", sa.Integer(), nullable=False, comment="사용자 식별자"),
-        sa.Column("username", sa.Text(), nullable=False, comment="로그인 아이디"),
-        sa.Column("email", sa.Text(), nullable=False, comment="가입 이메일"),
+        sa.Column(
+            "username",
+            sa.Text().with_variant(sa.String(40), "mysql"),
+            nullable=False,
+            comment="로그인 아이디",
+        ),
+        sa.Column(
+            "email",
+            sa.Text().with_variant(sa.String(254), "mysql"),
+            nullable=False,
+            comment="가입 이메일",
+        ),
         sa.Column(
             "password_hash",
             sa.Text(),
@@ -43,12 +54,20 @@ def upgrade() -> None:
     op.create_table(
         "job_applications",
         sa.Column("id", sa.Integer(), nullable=False, comment="지원 건 식별자"),
-        sa.Column("applicant", sa.Text(), nullable=False, comment="지원자 세션 식별자"),
+        sa.Column(
+            "applicant",
+            sa.Text().with_variant(sa.String(40), "mysql"),
+            nullable=False,
+            comment="지원자 세션 식별자",
+        ),
         sa.Column(
             "filename", sa.Text(), nullable=False, comment="제출한 이력서 파일명"
         ),
         sa.Column(
-            "resume", sa.Text(), nullable=False, comment="이력서에서 추출한 텍스트"
+            "resume",
+            sa.Text().with_variant(MEDIUMTEXT(), "mysql"),
+            nullable=False,
+            comment="이력서에서 추출한 텍스트",
         ),
         sa.Column("stage", sa.Text(), nullable=False, comment="지원 건의 현재 전형"),
         sa.Column(
@@ -56,7 +75,7 @@ def upgrade() -> None:
         ),
         sa.Column(
             "created_at",
-            sa.Text(),
+            sa.Text().with_variant(sa.DateTime(), "mysql"),
             server_default=sa.text("(CURRENT_TIMESTAMP)"),
             nullable=False,
             comment="지원 접수 시각(UTC)",
@@ -78,7 +97,10 @@ def upgrade() -> None:
             comment="응답이 속한 지원 건 식별자",
         ),
         sa.Column(
-            "question_id", sa.Text(), nullable=False, comment="응답 대상 질문 식별자"
+            "question_id",
+            sa.Text().with_variant(sa.String(30), "mysql"),
+            nullable=False,
+            comment="응답 대상 질문 식별자",
         ),
         sa.Column(
             "answer", sa.Text(), nullable=False, comment="지원자가 입력한 면접 답변"

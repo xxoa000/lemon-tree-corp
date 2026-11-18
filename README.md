@@ -99,3 +99,28 @@ UTF-8 TXT 이력서(최대 2MB)를 제출합니다. 이력서에서 추출한 �
 로컬 업무 DB에 저장합니다. 연습용 이력서를 사용하세요. 지원 건별로 서류 심사, 기술 면접,
 인성 면접, 최종 결과가 진행됩니다. 면접은 직무별 기술 질문, 공통 인성 질문과 규칙 기반 평가를 사용합니다.
 지원 내역에서 이전 전형 결과나 중단한 면접을 확인할 수 있고, 언제든 새로 지원할 수 있습니다.
+
+## 로컬 MySQL과 Alembic
+
+Compose의 백엔드와 Alembic은 같은 MySQL 데이터베이스를 사용합니다. 루트 `.env`에
+`MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`와 공개 포트
+`MYSQL_PORT`, `REDIS_PORT`, `BACK_PORT`를 설정합니다. 로그인을 사용하려면
+`WORKPLACE_JWT_SECRET`도 지정합니다.
+
+```bash
+docker compose config --quiet
+docker compose up -d --build backend
+docker compose exec backend python -m alembic current
+docker compose exec backend python -m alembic check
+```
+
+백엔드가 시작되면 마이그레이션을 적용합니다. DBeaver에서 호스트 `127.0.0.1`,
+포트 `MYSQL_PORT`, 데이터베이스 `MYSQL_DATABASE`로 연결하고 테이블 목록을 새로고침합니다.
+프런트엔드는 Mac에서 `BACKEND_URL=http://127.0.0.1:<BACK_PORT> npm run dev`로 실행합니다
+(`<BACK_PORT>`는 실제 포트 번호로 바꿉니다).
+
+Uvicorn을 Mac에서 직접 실행한다면 같은 터미널에 `MYSQL_HOST=127.0.0.1`과 실제 공개
+`MYSQL_PORT`, 계정 변수들을 내보내거나 `DATABASE_URL=mysql+pymysql://…`을 지정합니다.
+그 상태에서 `backend/`의 `python -m alembic upgrade head`와 Uvicorn이 같은 DB에 연결됩니다.
+`DATABASE_URL`이 있으면 우선 사용하며, 두 연결 설정이 모두 없으면 기존 로컬 SQLite를 사용합니다.
+SQLite에 저장된 계정·지원·업무 데이터는 MySQL로 자동 복사되지 않습니다.

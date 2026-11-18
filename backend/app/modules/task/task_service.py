@@ -1,8 +1,10 @@
 """업무 조회와 담당자 권한을 확인한 상태 변경을 처리합니다."""
 
 from fastapi import HTTPException
-from sqlalchemy import Engine, select, text
+from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
+
+from app.database import lock_sqlite_write
 
 from .task_model import Task, TaskEvent
 from .task_schemas import Status, TaskResponse
@@ -20,8 +22,8 @@ def list_tasks(engine: Engine) -> list[TaskResponse]:
 def update_status(engine: Engine, task_id: str, employee_id: str, status: Status) -> TaskResponse:
     """담당자의 상태 변경과 변경 전후 이력을 한 트랜잭션으로 저장합니다."""
     with Session(engine) as session, session.begin():
-        session.execute(text("BEGIN IMMEDIATE"))
-        task = session.get(Task, task_id)
+        lock_sqlite_write(session)
+        task = session.get(Task, task_id, with_for_update=True)
         if task is None:
             raise HTTPException(404, "업무를 찾을 수 없습니다.")
         if task.assignee_id != employee_id:
