@@ -4,6 +4,8 @@ from alembic import context
 from sqlalchemy import Connection
 
 from app.database import Base, create_workplace_engine
+from app.modules.auth import auth_model  # noqa: F401
+from app.modules.jobs import jobs_model  # noqa: F401
 from app.modules.task import task_model  # noqa: F401
 
 

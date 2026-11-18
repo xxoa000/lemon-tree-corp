@@ -166,14 +166,16 @@ export default function Workspace() {
             </button>
             {session ? (
               <>
-                <button
-                  onClick={() => {
-                    const person = people.get(session.employee_id);
-                    if (person) setProfile(person);
-                  }}
-                >
-                  마이페이지
-                </button>
+                {people.has(session.employee_id) && (
+                  <button
+                    onClick={() => {
+                      const person = people.get(session.employee_id);
+                      if (person) setProfile(person);
+                    }}
+                  >
+                    마이페이지
+                  </button>
+                )}
                 <button onClick={logout}>로그아웃</button>
               </>
             ) : (
@@ -225,7 +227,16 @@ export default function Workspace() {
               onSelect={setProfile}
             />
           )}
-          {section === '공고' && <Jobs />}
+          {section === '공고' && (
+            <Jobs
+              key={session?.employee_id ?? 'guest'}
+              employeeId={session?.employee_id}
+              onLogin={() => {
+                setError('');
+                setLoginOpen(true);
+              }}
+            />
+          )}
         </div>
       </main>
       <footer className="taskbar">

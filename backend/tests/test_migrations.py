@@ -40,11 +40,53 @@ def test_upgrade_preserves_legacy_tasks_and_events(tmp_path, monkeypatch):
                 "SELECT title, status FROM tasks WHERE id = 'LT-21'"
             ).one() == ("기존 제목", "done")
             assert connection.exec_driver_sql("SELECT * FROM task_events").one() == (
-                42, "LT-21", "LT-011", "todo", "done", "2026-11-18 00:00:00",
+                42,
+                "LT-21",
+                "LT-011",
+                "todo",
+                "done",
+                "2026-11-18 00:00:00",
             )
-            assert connection.exec_driver_sql("SELECT count(*) FROM tasks").scalar_one() == 4
-            assert connection.exec_driver_sql("SELECT version_num FROM alembic_version").scalar_one() == "0001"
+            assert (
+                connection.exec_driver_sql("SELECT count(*) FROM tasks").scalar_one()
+                == 4
+            )
+            assert (
+                connection.exec_driver_sql(
+                    "SELECT version_num FROM alembic_version"
+                ).scalar_one()
+                == "0003"
+            )
     finally:
         engine.dispose()
 
     command.check(Config(str(BACKEND_DIR / "alembic.ini")))
+
+
+def test_role_migration_keeps_existing_application(tmp_path, monkeypatch):
+    """직무 추가 이전의 지원과 답변이 백엔드 지원으로 유지되는지 확인합니다."""
+    monkeypatch.setenv("WORKPLACE_DB_PATH", str(tmp_path / "jobs.sqlite3"))
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    command.upgrade(config, "0002")
+    engine = create_workplace_engine()
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "INSERT INTO job_applications (id, applicant, filename, resume, stage, feedback) "
+                "VALUES (1, 'acct:1', 'resume.txt', 'example resume', 'technical', 'passed')"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO job_answers (application_id, question_id, answer, score) "
+                "VALUES (1, 'tech-api', 'example answer', 3)"
+            )
+        upgrade_workplace(engine)
+        with engine.connect() as connection:
+            assert connection.exec_driver_sql(
+                "SELECT role, stage FROM job_applications WHERE id = 1"
+            ).one() == ("backend", "technical")
+            assert connection.exec_driver_sql(
+                "SELECT question_id, score FROM job_answers WHERE application_id = 1"
+            ).one() == ("tech-api", 3)
+    finally:
+        engine.dispose()
+    command.check(config)

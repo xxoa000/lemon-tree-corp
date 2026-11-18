@@ -14,3 +14,15 @@
   border-radius: 6px;
   padding: 8px;
 }
+
+.auth-links {
+  @apply mt-4 flex flex-wrap gap-2;
+}
+
+.auth-links button {
+  @apply cursor-pointer border-0 bg-transparent underline;
+}
+
+.recovery-code {
+  @apply break-all rounded bg-green-50 p-2;
+}
