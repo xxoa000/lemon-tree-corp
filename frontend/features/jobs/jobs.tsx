@@ -75,6 +75,8 @@ export function Jobs({
     try {
       const data = new FormData(form);
       data.set('role', role);
+      const file = data.get('resume');
+      if (file instanceof File && !file.name) data.delete('resume');
       const row = await apply(data);
       setApplications((current) => [row, ...current]);
       setSelected(row.id);
@@ -145,14 +147,14 @@ export function Jobs({
           <p>{posting.format}</p>
           <p className="muted">
             텍스트 모의면접입니다. 직원 역할별 질문과 공개된 연습용 기준을
-            사용합니다. 실제 개인정보 대신 연습용 이력서를 권장합니다.
+            사용합니다. 이력서 없이 연습을 시작할 수 있습니다.
           </p>
           <details>
             <summary>모의 전형 기준</summary>
             <p>
-              서류는 60자 이상의 본인 개발 경험을 확인합니다. 기술 면접은{' '}
-              {posting.criteria}을 평가하고, 인성 면접은 협업·행동과 결과·마감
-              대응을 확인합니다.
+              이력서를 올리면 60자 이상의 본인 개발 경험을 확인합니다. 파일을
+              생략하면 기술 면접부터 시작합니다. 기술 면접은 {posting.criteria}
+              을 평가하고, 인성 면접은 협업·행동과 결과·마감 대응을 확인합니다.
             </p>
             <p>
               면접은 질문마다 25자 이상의 구체적인 답변을 평가합니다. 질문당 세
@@ -166,11 +168,11 @@ export function Jobs({
               onSubmit={submitApplication}
             >
               <label>
-                이력서 파일 (텍스트 기반 PDF 또는 TXT, 최대 2MB)
-                <input name="resume" type="file" accept=".pdf,.txt" required />
+                이력서 파일 (선택 · 텍스트 기반 PDF 또는 TXT, 최대 2MB)
+                <input name="resume" type="file" accept=".pdf,.txt" />
               </label>
               <button className="action" disabled={pending}>
-                새 지원서 제출
+                모의면접 시작
               </button>
             </form>
           ) : (
@@ -197,7 +199,7 @@ export function Jobs({
                   #{row.id} ·{' '}
                   {postings.find((item) => item.role === row.role)?.title ??
                     row.role}{' '}
-                  · {row.filename} · {stages[row.stage]}
+                  · {row.filename || '이력서 없이 연습'} · {stages[row.stage]}
                 </option>
               ))}
             </select>

@@ -10,6 +10,10 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       REDIS_URL: redis://redis:6379/0
+      WORKPLACE_LLM_MODE: ${WORKPLACE_LLM_MODE:-mock}
+      TALK_ROOM_LIMIT: ${TALK_ROOM_LIMIT:-1000}
+      TALK_TOTAL_LIMIT: ${TALK_TOTAL_LIMIT:-3000}
+      TALK_TTL_SECONDS: ${TALK_TTL_SECONDS:-604800}
       WORKPLACE_JWT_SECRET: ${WORKPLACE_JWT_SECRET:-}
       WORKPLACE_PASSWORD: ${WORKPLACE_PASSWORD:-}
     depends_on:
@@ -34,7 +38,8 @@ services:
       retries: 15
   redis:
     ports:
-      - "${REDIS_PORT}:6379"
+      - "127.0.0.1:${REDIS_PORT}:6379"
     image: redis:7-alpine
+    command: ["redis-server", "--maxmemory", "96mb", "--maxmemory-policy", "noeviction", "--save", "", "--appendonly", "no"]
 volumes:
   mysql_data:

@@ -169,7 +169,7 @@ def application_view(db: Session, row: Application) -> ApplicationView:
     question = None
     for index, (key, interviewer, prompt, _) in enumerate(questions_for(row)):
         if key not in answered:
-            if index == 0:
+            if index == 0 and row.resume:
                 lines = row.resume.splitlines()
                 relevant = next(
                     (
@@ -189,6 +189,14 @@ def application_view(db: Session, row: Application) -> ApplicationView:
                     lines[0],
                 )
                 prompt = f"이력서에서 확인한 내용: “{relevant[:180]}”\n\n{prompt}"
+            if not row.resume:
+                prompt = prompt.replace(
+                    "지원서에 나온 경험을 바탕으로", "가상의 프로젝트를 예로 들어"
+                )
+                prompt = prompt.replace(
+                    "지원서에 나온 프로젝트를 예로 들어",
+                    "실제 또는 가상의 프로젝트를 예로 들어",
+                )
             question = Question(id=key, interviewer=interviewer, prompt=prompt)
             break
     return ApplicationView(
@@ -214,12 +222,12 @@ def applications(engine: Engine, applicant: str) -> list[ApplicationView]:
 
 
 def apply(
-    engine: Engine, applicant: str, upload: UploadFile, role: str
+    engine: Engine, applicant: str, upload: UploadFile | None, role: str
 ) -> ApplicationView:
     """이력서를 검토하고 이전 지원 결과와 무관하게 새 지원을 생성합니다."""
     if role not in ROLE_DETAILS:
         raise HTTPException(422, "공고 직무를 확인해 주세요.")
-    filename, resume = read_resume(upload)
+    filename, resume = read_resume(upload) if upload and upload.filename else ("", "")
     has_experience = any(
         word in resume.lower()
         for word in (
@@ -232,7 +240,7 @@ def apply(
             "만들",
         )
     )
-    passed = len(resume) >= 60 and has_experience
+    passed = not filename or (len(resume) >= 60 and has_experience)
     with Session(engine) as db, db.begin():
         row = Application(
             applicant=applicant,
@@ -241,7 +249,9 @@ def apply(
             resume=resume,
             stage="technical" if passed else "screen_failed",
             feedback=(
-                "서류 통과 · 개발 경험이 확인되었습니다. 1차 기술 면접을 시작합니다."
+                "이력서 없이 연습합니다. 서류 심사를 건너뛰고 1차 기술 면접을 시작합니다."
+                if not filename
+                else "서류 통과 · 개발 경험이 확인되었습니다. 1차 기술 면접을 시작합니다."
                 if passed
                 else "서류 불합격 · 60자 이상의 이력서에 프로젝트와 본인의 기여를 구체적으로 적어 재지원해 주세요."
             ),

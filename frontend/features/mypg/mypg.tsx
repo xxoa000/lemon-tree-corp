@@ -7,6 +7,7 @@ import {
   saveProfile,
   uploadAvatar,
 } from './mypg-api';
+import { Budgets } from '../llm/llm';
 import { ResumeManager } from '../cv/cv';
 import styles from './mypg.module.css';
 
@@ -14,6 +15,7 @@ export function MyPage() {
   const [tab, setTab] = useState<'profile' | 'resume'>('profile');
   const [profile, setProfile] = useState<Profile>();
   const [avatarVersion, setAvatarVersion] = useState(0);
+  const [budgetsOpen, setBudgetsOpen] = useState(false);
   const [staff, setStaff] = useState<Awaited<ReturnType<typeof getStaff>>>();
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
@@ -167,6 +169,15 @@ export function MyPage() {
             </form>
             {profile.role === 'admin' && (
               <section className={styles.staff}>
+                <button
+                  className="action"
+                  aria-expanded={budgetsOpen}
+                  onClick={() => setBudgetsOpen((current) => !current)}
+                >
+                  모의 LLM 예산
+                </button>
+                {budgetsOpen && <Budgets />}
+
                 <button
                   className="action"
                   disabled={pending}

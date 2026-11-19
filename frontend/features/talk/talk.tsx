@@ -53,11 +53,13 @@ export function Talk({
   }>();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [contactId, setContactId] = useState('');
   const room = rooms.find((item) => item.id === selected);
   const roomId = room?.id;
   const latest = room?.latest;
+  const earliest = room?.earliest ?? 0;
   const participants = room?.participants;
   const current = detail?.id === roomId ? detail?.data : undefined;
 
@@ -81,7 +83,7 @@ export function Talk({
             return { id, data };
           const oldest = data.messages[0].id;
           const old = previous.data.messages.filter(
-            (message) => message.id < oldest,
+            (message) => message.id < oldest && message.id >= earliest,
           );
           return {
             id,
@@ -101,7 +103,7 @@ export function Talk({
     return () => {
       active = false;
     };
-  }, [roomId, latest, participants, refreshKey]);
+  }, [roomId, latest, earliest, participants, refreshKey]);
 
   const last = current?.messages.at(-1)?.id;
   const unread = room?.unread ?? 0;
@@ -122,6 +124,7 @@ export function Talk({
   function choose(id: number) {
     setSelected(id);
     setContactId('');
+    setNotice('');
     setError('');
   }
 
@@ -155,11 +158,18 @@ export function Talk({
     if (!room) return;
     const form = event.currentTarget;
     void run(async () => {
-      await api.sendMessage(
+      const result = await api.sendMessage(
         room.id,
         String(new FormData(form).get('body') ?? ''),
       );
       form.reset();
+      const notices: Record<string, string> = {
+        budget_exhausted:
+          '메시지는 전송됐습니다. 이 직원의 모의 답장에 필요한 남은 예산이 부족합니다.',
+        disabled: '메시지는 전송됐습니다. 모의 답장은 꺼져 있습니다.',
+        unavailable: '메시지는 전송됐습니다. 모의 답장을 저장하지 못했습니다.',
+      };
+      setNotice(notices[result.mock] ?? '');
       await refresh();
     });
   }
@@ -173,6 +183,11 @@ export function Talk({
       {error && (
         <p className="error" role="alert">
           {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="muted">
+          {notice}
         </p>
       )}
       <div className={styles.talk}>
@@ -332,7 +347,8 @@ export function Talk({
               {current.messages.map((message) => (
                 <li key={message.id} data-mine={message.sender === current.me}>
                   <small>
-                    {message.name} ·{' '}
+                    {message.name}
+                    {message.simulated ? ' · 모의 응답' : ''} ·{' '}
                     {new Date(message.sent_at).toLocaleTimeString('ko-KR', {
                       hour: '2-digit',
                       minute: '2-digit',

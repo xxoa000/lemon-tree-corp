@@ -7,6 +7,7 @@ export type Room = {
   team: string | null;
   owner: boolean;
   latest: number;
+  earliest: number;
   participants: number;
   unread: number;
 };
@@ -16,6 +17,7 @@ export type Message = {
   name: string;
   body: string;
   sent_at: string;
+  simulated: boolean;
 };
 export type Conversation = {
   me: number;
@@ -33,7 +35,10 @@ export const openDm = (contact: number) =>
 export const createGroup = (data: object) =>
   request<{ id: number }>('talk/groups', json('POST', data));
 export const sendMessage = (id: number, body: string) =>
-  request(`talk/rooms/${id}/messages`, json('POST', { body }));
+  request<{ id: number; mock: string }>(
+    `talk/rooms/${id}/messages`,
+    json('POST', { body }),
+  );
 export const markRead = (id: number, message_id: number) =>
   request(`talk/rooms/${id}/read`, json('POST', { message_id }));
 export const changeMember = (id: number, contact: number, remove: boolean) =>

@@ -201,3 +201,25 @@ def test_role_specific_final_results(
         assert row["stage"] == expected
         assert row["question"] is None
         assert client.get(url).json()[0] == row
+
+
+def test_mock_interview_without_resume(tmp_path, monkeypatch):
+    """개인정보 업로드 없이 기술 및 인성 면접을 완료할 수 있습니다."""
+    monkeypatch.setenv("WORKPLACE_DB_PATH", str(tmp_path / "no-resume.sqlite3"))
+    monkeypatch.setenv("WORKPLACE_JWT_SECRET", "test-only-account-secret-32-characters")
+    with TestClient(app) as client:
+        register(client, "candidate")
+        assert login(client, "candidate").status_code == 200
+        response = client.post("/api/v1/jobs/applications", data={"role": "backend"})
+        assert response.status_code == 201
+        row = response.json()
+        assert row["stage"] == "technical"
+        assert row["filename"] == ""
+        assert "서류 심사를 건너뛰고" in row["feedback"]
+        assert "이력서에서 확인한 내용" not in row["question"]["prompt"]
+        path = f"/api/v1/jobs/applications/{row['id']}/answers"
+        for answer in ANSWERS:
+            row = client.post(
+                path, json={"question_id": row["question"]["id"], "answer": answer}
+            ).json()
+        assert row["stage"] == "hired"

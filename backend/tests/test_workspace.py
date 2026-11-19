@@ -1,14 +1,18 @@
 """이력서 접근 권한, LemonTalk 읽음·멤버십, TechVlog CRUD를 검증합니다."""
 
+import fakeredis
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.modules.talk import talk_store
 
 
 @pytest.fixture
 def clients(tmp_path, monkeypatch):
     """서로 다른 세 계정을 같은 로컬 DB에 로그인합니다."""
+    redis = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(talk_store, "client", lambda: redis)
     monkeypatch.setenv("WORKPLACE_DB_PATH", str(tmp_path / "workspace.sqlite3"))
     monkeypatch.setenv(
         "WORKPLACE_JWT_SECRET", "workspace-test-secret-at-least-32-bytes"
@@ -109,3 +113,114 @@ def test_vlog_has_release_notes_and_author_crud(clients):
     )
     assert alice.delete(target).status_code == 204
     assert all(row["id"] != response.json()["id"] for row in alice.get(url).json())
+
+
+def test_redis_retains_recent_messages_and_unread(clients, monkeypatch):
+    """방별 및 전체 한도를 적용하고 오래된 메시지를 읽음 집계에서 뺍니다."""
+    alice, bobby, _ = clients
+    monkeypatch.setenv("TALK_ROOM_LIMIT", "2")
+    monkeypatch.setenv("TALK_TOTAL_LIMIT", "2")
+    room = alice.post(
+        "/api/v1/talk/groups", json={"name": "한도 테스트", "team": "개발팀"}
+    ).json()["id"]
+    uri = f"/api/v1/talk/rooms/{room}"
+    account = next(
+        row["id"]
+        for row in alice.get("/api/v1/talk/contacts").json()
+        if row["name"] == "bobby"
+    )
+    assert alice.put(f"{uri}/members/{account}").status_code == 204
+    for body in ("first", "second", "third"):
+        assert alice.post(uri + "/messages", json={"body": body}).status_code == 201
+    assert [row["body"] for row in bobby.get(uri).json()["messages"]] == [
+        "second",
+        "third",
+    ]
+    assert bobby.get("/api/v1/talk/rooms").json()[0]["unread"] == 2
+
+    other = alice.post(
+        "/api/v1/talk/groups", json={"name": "다른 방", "team": "개발팀"}
+    ).json()["id"]
+    assert (
+        alice.post(
+            f"/api/v1/talk/rooms/{other}/messages", json={"body": "global"}
+        ).status_code
+        == 201
+    )
+    assert [row["body"] for row in bobby.get(uri).json()["messages"]] == ["third"]
+    assert bobby.get("/api/v1/talk/rooms").json()[0]["unread"] == 1
+
+
+def test_staff_mock_reply_and_persistent_budget(clients, monkeypatch):
+    """직원 모의 응답과 관리자 예산 한도, 외부 호출 비활성화를 확인합니다."""
+    from sqlalchemy import text
+
+    from app.database import create_workplace_engine
+    from app.modules.auth.auth_seed import provision
+
+    monkeypatch.setenv("WORKPLACE_LLM_MODE", "mock")
+    alice, bobby, _ = clients
+    staff = next(
+        row["id"]
+        for row in alice.get("/api/v1/talk/contacts").json()
+        if row["employee_id"] == "LT-SYS-001"
+    )
+    dm = alice.post("/api/v1/talk/dm", json={"contact": staff}).json()["id"]
+    uri = f"/api/v1/talk/rooms/{dm}"
+    assert alice.get("/api/v1/llm/budgets").status_code == 403
+    assert (
+        alice.post(uri + "/messages", json={"body": "이력서 없이 연습할까요?"}).json()[
+            "mock"
+        ]
+        == "sent"
+    )
+    messages = alice.get(uri).json()["messages"]
+    assert len(messages) == 2 and messages[-1]["simulated"] is True
+
+    engine = create_workplace_engine()
+    try:
+        provision(engine, "LT-SYS-001", "admin-fixture-password")
+        with engine.connect() as db:
+            assert db.scalar(text("SELECT COUNT(*) FROM talk_messages")) == 0
+            assert (
+                db.scalar(text("SELECT COUNT(*) FROM llm_usage WHERE state='settled'"))
+                == 1
+            )
+    finally:
+        engine.dispose()
+
+    assert (
+        bobby.post(
+            "/api/v1/session",
+            json={
+                "username": "seoyun",
+                "password": "admin-fixture-password",
+            },
+        ).status_code
+        == 200
+    )
+    budgets = bobby.get("/api/v1/llm/budgets").json()
+    assert len(budgets) == 11
+    current = next(row for row in budgets if row["employee_id"] == "LT-SYS-001")
+    assert current["used"] > 0
+    assert (
+        bobby.patch(
+            "/api/v1/llm/budgets/LT-SYS-001",
+            json={
+                "salary": current["salary"],
+                "monthly_limit": current["used"],
+            },
+        ).status_code
+        == 204
+    )
+    assert (
+        alice.post(uri + "/messages", json={"body": "예산이 있나요?"}).json()["mock"]
+        == "budget_exhausted"
+    )
+    assert len(alice.get(uri).json()["messages"]) == 3
+    monkeypatch.setenv("WORKPLACE_LLM_MODE", "off")
+    assert (
+        alice.post(uri + "/messages", json={"body": "안녕하세요"}).json()["mock"]
+        == "disabled"
+    )
+    assert len(alice.get(uri).json()["messages"]) == 4

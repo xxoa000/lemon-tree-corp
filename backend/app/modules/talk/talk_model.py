@@ -1,6 +1,6 @@
 """LemonTalk 대화방, 참여자와 메시지를 영속화합니다."""
 
-from sqlalchemy import ForeignKey, Index, Integer, String, Text
+from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -34,7 +34,7 @@ class Member(Base):
         ForeignKey("accounts.id"), primary_key=True, index=True, comment="참여 계정 ID"
     )
     joined_after: Mapped[int] = mapped_column(
-        Integer, comment="참여 전에 존재한 마지막 메시지 ID"
+        BigInteger, comment="참여 전에 존재한 마지막 메시지 ID"
     )
     last_read: Mapped[int] = mapped_column(
         Integer, comment="마지막으로 확인한 메시지 ID"

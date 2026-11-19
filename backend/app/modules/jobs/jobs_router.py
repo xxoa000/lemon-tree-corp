@@ -38,7 +38,7 @@ def applications(
 def apply(
     request: Request,
     applicant: Applicant,
-    resume: Annotated[UploadFile, File()],
+    resume: Annotated[UploadFile | None, File()] = None,
     role: Annotated[str, Form(max_length=20)] = "backend",
 ) -> ApplicationView:
     """이력서를 접수하고 서류 심사 결과를 기록합니다."""

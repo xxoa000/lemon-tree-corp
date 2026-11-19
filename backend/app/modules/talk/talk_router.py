@@ -1,17 +1,18 @@
 """LemonTalk HTTP 및 라이브 이벤트 API입니다."""
 
-import asyncio
 import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
+from redis.asyncio import Redis
+from redis.exceptions import RedisError
 from starlette.concurrency import run_in_threadpool
 
 from app.modules.auth.auth_profile import account_id
 from app.modules.auth.auth_router import Subject, session_employee
 
-from . import talk_service
+from . import talk_service, talk_store
 from .talk_schemas import Dm, Group, Read, Send
 
 
@@ -49,23 +50,28 @@ async def events(request: Request, owner: Owner) -> StreamingResponse:
     engine = request.app.state.workplace_engine
 
     async def stream():
-        """목록 변경과 연결 유지 이벤트를 전송합니다."""
+        """계정 채널을 구독해 알림이 올 때만 새 목록을 보냅니다."""
         previous = ""
-        while not await request.is_disconnected():
-            try:
-                await run_in_threadpool(session_employee, request)
-            except HTTPException:
-                return
-            snapshot = await run_in_threadpool(
-                talk_service.room_snapshot, engine, owner
-            )
-            payload = json.dumps(snapshot, ensure_ascii=False)
-            if payload != previous:
-                previous = payload
-                yield f"data: {payload}\n\n"
-            else:
-                yield ": keep-alive\n\n"
-            await asyncio.sleep(1)
+        try:
+            async with (
+                Redis.from_url(talk_store.redis_url(), decode_responses=True) as redis,
+                redis.pubsub(ignore_subscribe_messages=True) as pubsub,
+            ):
+                await pubsub.subscribe(talk_store.channel(owner))
+                while not await request.is_disconnected():
+                    await run_in_threadpool(session_employee, request)
+                    snapshot = await run_in_threadpool(
+                        talk_service.room_snapshot, engine, owner
+                    )
+                    payload = json.dumps(snapshot, ensure_ascii=False)
+                    if payload != previous:
+                        previous = payload
+                        yield f"data: {payload}\n\n"
+                    else:
+                        yield ": keep-alive\n\n"
+                    await pubsub.get_message(timeout=20, ignore_subscribe_messages=True)
+        except (HTTPException, RedisError):
+            return
 
     return StreamingResponse(
         stream(),
@@ -108,11 +114,9 @@ def detail(
 @router.post("/rooms/{room_id}/messages", status_code=201)
 def send(room_id: int, data: Send, request: Request, owner: Owner) -> dict:
     """메시지를 저장하고 새로운 식별자를 반환합니다."""
-    return {
-        "id": talk_service.send(
-            request.app.state.workplace_engine, room_id, owner, data.body
-        )
-    }
+    return talk_service.send(
+        request.app.state.workplace_engine, room_id, owner, data.body
+    )
 
 
 @router.post("/rooms/{room_id}/read", status_code=204)
