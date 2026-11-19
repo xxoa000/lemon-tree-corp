@@ -18,3 +18,11 @@
 .photoForm label {
   @apply grid gap-2;
 }
+
+.tabs {
+  @apply my-3 flex flex-wrap gap-2;
+}
+
+.tabs button[aria-pressed='true'] {
+  @apply outline-2 outline-offset-2 outline-green-600;
+}

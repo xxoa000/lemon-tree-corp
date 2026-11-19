@@ -55,28 +55,29 @@ export function Org({
   return (
     <>
       {ceo && (
-        <section className={styles.hero}>
-          <div>
-            <p className={styles.eyebrow}>조직도</p>
-            <h2>LemonTree Corp</h2>
-            <p>디자인 · 개발 · 인프라</p>
-          </div>
+        <div className={styles.root}>
           <Person employee={ceo} onSelect={onSelect} />
-        </section>
+        </div>
       )}
-      <div className={styles['team-grid']}>
+      <div className={styles.tree}>
         {teams.map((team) => (
-          <section className="card" key={team.name}>
-            <h2>{team.name}</h2>
-            <p className="muted">구성원 {team.member_ids.length}명</p>
-            {team.member_ids.map((id) => {
-              const person = people.get(id);
-              return (
-                person && (
-                  <Person key={id} employee={person} onSelect={onSelect} />
-                )
-              );
-            })}
+          <section className={styles.branch} key={team.name}>
+            <header className={styles.team}>
+              <h2>{team.name}</h2>
+              <span>{team.member_ids.length}명</span>
+            </header>
+            <ul className={styles.staff}>
+              {team.member_ids.map((id) => {
+                const person = people.get(id);
+                if (!person) return null;
+                return (
+                  <li key={id}>
+                    <Person employee={person} onSelect={onSelect} />
+                    {id === team.leader_id && <small>팀장</small>}
+                  </li>
+                );
+              })}
+            </ul>
           </section>
         ))}
       </div>
@@ -96,17 +97,73 @@ export function Org({
   );
 }
 
+const contactFields = ['이메일', '연락처', '주소', '홈페이지'];
+const resumeSections = [
+  ['학력사항', '등록된 학력이 없습니다.'],
+  ['경력사항', '등록된 프로젝트 경력이 없습니다.'],
+  ['자격증', '등록된 자격증이 없습니다.'],
+  ['수상', '등록된 수상 이력이 없습니다.'],
+] as const;
+
 export function Profile({ profile }: { profile: Employee }) {
+  const skills = profile.specialty
+    .split('·')
+    .map((skill) => skill.trim())
+    .filter(Boolean);
+
   return (
-    <>
-      <Avatar employee={profile} />
-      <h2 id="dialog-heading">
-        {profile.name} {profile.rank}
-      </h2>
-      <p>
-        {profile.team} · {profile.job_title}
+    <article className={styles.resume}>
+      <p className={styles.resumeTitle} lang="en">
+        RESUME
       </p>
-      <p>{profile.specialty}</p>
-    </>
+      <header className={styles.resumeHeader}>
+        <div className={styles.resumePortrait}>
+          <Avatar employee={profile} />
+        </div>
+        <div className={styles.resumeIdentity}>
+          <h2 id="dialog-heading">{profile.name}</h2>
+          <p className={styles.resumeRole}>
+            {profile.team} · {profile.rank} · {profile.job_title}
+          </p>
+          <dl className={styles.resumeContacts}>
+            {contactFields.map((field) => (
+              <div key={field}>
+                <dt>{field}</dt>
+                <dd>
+                  <span aria-hidden="true">—</span>
+                  <span className="sr-only">등록된 정보 없음</span>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </header>
+      {resumeSections.map(([heading, message]) => (
+        <section className={styles.resumeSection} key={heading}>
+          <h3>{heading}</h3>
+          <p className={styles.resumeEmpty}>{message}</p>
+        </section>
+      ))}
+      <section className={styles.resumeSection}>
+        <h3>업무 스킬</h3>
+        {skills.length > 0 ? (
+          <ul className={styles.resumeSkills}>
+            {skills.map((skill) => (
+              <li key={skill}>
+                <span>{skill}</span>
+                <span
+                  className={styles.resumeSkillTrack}
+                  title="숙련도 미등록"
+                  aria-hidden="true"
+                />
+                <span className="sr-only">숙련도 미등록</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.resumeEmpty}>등록된 업무 스킬이 없습니다.</p>
+        )}
+      </section>
+    </article>
   );
 }

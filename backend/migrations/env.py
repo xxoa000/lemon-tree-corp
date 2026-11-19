@@ -7,8 +7,11 @@ from sqlalchemy.schema import DefaultClause
 
 from app.database import Base, create_workplace_engine, migration_connection
 from app.modules.auth import auth_model  # noqa: F401
+from app.modules.cv import cv_model  # noqa: F401
 from app.modules.jobs import jobs_model  # noqa: F401
+from app.modules.talk import talk_model  # noqa: F401
 from app.modules.task import task_model  # noqa: F401
+from app.modules.vlog import vlog_model  # noqa: F401
 
 
 def compare_defaults(

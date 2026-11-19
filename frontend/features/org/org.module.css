@@ -1,42 +1,5 @@
 @reference "tailwindcss";
 
-.hero {
-  @apply flex items-center justify-between;
-  gap: 18px;
-  padding: 26px;
-  background: #e6efda;
-  border: 1px solid #d5e3cb;
-  border-radius: 14px;
-  margin-bottom: 18px;
-}
-
-.hero h2 {
-  font-size: clamp(1.36rem, 3vw, 1.95rem);
-  letter-spacing: -0.04em;
-}
-
-.hero p {
-  margin: 4px 0 0;
-}
-
-.hero .eyebrow {
-  margin: 0 0 6px;
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
-.hero .person {
-  width: auto;
-  min-width: 165px;
-  background: #f6faef;
-}
-
-.team-grid {
-  @apply grid items-start;
-  gap: 14px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .history {
   margin-top: 16px;
 }
@@ -130,15 +93,227 @@
   background-position: 100% 100%;
 }
 
-@media (max-width: 870px) {
-  .team-grid {
-    grid-template-columns: minmax(0, 1fr);
+.root {
+  @apply relative mx-auto max-w-64 rounded-xl border border-green-200 bg-green-50 p-2;
+}
+
+.root::after {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  height: 24px;
+  border-left: 1px solid #a0b7ac;
+  content: '';
+}
+
+.tree {
+  @apply grid gap-3 md:grid-cols-3;
+  margin-top: 24px;
+}
+
+.branch {
+  @apply relative min-w-0 pt-5;
+}
+
+.branch::after,
+.branch::before {
+  position: absolute;
+  top: 0;
+  content: '';
+}
+
+.branch::after {
+  left: 50%;
+  height: 20px;
+  border-left: 1px solid #a0b7ac;
+}
+
+@media (min-width: 768px) {
+  .tree {
+    gap: 0;
+  }
+  .branch {
+    padding-inline: 8px;
+  }
+  .branch::before {
+    inset-inline: 0;
+    border-top: 1px solid #a0b7ac;
+  }
+  .branch:first-child::before {
+    left: 50%;
+  }
+  .branch:last-child::before {
+    right: 50%;
   }
 }
 
-@media (max-width: 520px) {
-  .hero {
-    @apply flex-wrap;
-    padding: 14px;
+.team {
+  @apply flex items-center justify-between gap-2 rounded-lg bg-green-900 p-3 text-white;
+}
+
+.team h2 {
+  @apply m-0;
+}
+
+.staff {
+  @apply m-0 ml-4 list-none border-l border-green-300 py-2 pl-4;
+}
+
+.staff li {
+  @apply relative my-2 rounded-lg border border-green-100 bg-white;
+}
+
+.staff li::before {
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  width: 17px;
+  border-top: 1px solid #a0b7ac;
+  content: '';
+}
+
+.staff li > small {
+  @apply ml-3 text-green-800;
+}
+
+.resume {
+  @apply bg-white text-neutral-950;
+  font-family:
+    'Noto Serif KR', 'AppleMyungjo', 'Nanum Myeongjo', 'Batang', Georgia, serif;
+}
+
+.resumeTitle {
+  @apply m-0 border-b border-neutral-900 pb-5 text-center font-sans text-3xl font-black;
+  letter-spacing: 0.02em;
+}
+
+.resumeHeader {
+  @apply grid min-w-0 items-start gap-5 border-b border-neutral-900 py-6;
+  grid-template-columns: minmax(76px, 27%) minmax(0, 1fr);
+}
+
+.resumePortrait {
+  @apply grid min-w-0 place-items-center overflow-hidden bg-neutral-100;
+  aspect-ratio: 7 / 8;
+}
+
+.resumePortrait .avatar {
+  @apply h-full w-auto rounded-none;
+  aspect-ratio: 1;
+}
+
+.resumeIdentity {
+  @apply min-w-0;
+}
+
+.resumeIdentity h2 {
+  @apply m-0 mb-2 font-normal;
+  font-size: clamp(1.65rem, 4.8vw, 3rem);
+  line-height: 1.12;
+}
+
+.resumeRole {
+  @apply m-0 mb-4 text-sm text-neutral-600;
+  overflow-wrap: anywhere;
+}
+
+.resumeContacts {
+  @apply m-0 grid gap-1.5;
+}
+
+.resumeContacts div {
+  @apply grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-4;
+}
+
+.resumeContacts dt {
+  min-width: 4.25em;
+}
+
+.resumeContacts dd {
+  @apply m-0 text-neutral-600;
+}
+
+.resumeSection {
+  @apply grid min-w-0 items-start gap-4 border-b border-neutral-900;
+  grid-template-columns: minmax(5.4rem, 23%) minmax(0, 1fr);
+  padding-block: clamp(1rem, 3.5vw, 1.9rem);
+}
+
+.resumeSection h3,
+.resumeSection p {
+  @apply m-0;
+}
+
+.resumeSection h3 {
+  @apply text-lg font-bold;
+}
+
+.resumeEmpty {
+  @apply text-sm text-neutral-600;
+}
+
+.resumeSkills {
+  @apply m-0 grid list-none gap-3 p-0;
+}
+
+.resumeSkills li {
+  @apply grid min-w-0 items-center gap-3;
+  grid-template-columns: minmax(5rem, 10rem) minmax(1rem, 1fr);
+  overflow-wrap: anywhere;
+}
+
+.resumeSkillTrack {
+  @apply h-px bg-neutral-300;
+  max-width: 16rem;
+}
+
+@media (min-width: 640px) {
+  .resumeHeader {
+    column-gap: clamp(2rem, 6vw, 4rem);
+    padding-block: 1.9rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .resumeHeader,
+  .resumeSection {
+    gap: 0.65rem;
+  }
+
+  .resumeSection h3 {
+    @apply text-base;
+  }
+
+  .resumeContacts div {
+    gap: 0.35rem;
+  }
+
+  .resumeSkills li {
+    grid-template-columns: minmax(4.4rem, 1fr) minmax(1rem, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  .root {
+    margin-inline: 0 auto;
+  }
+  .root::after {
+    left: 12px;
+    height: 12px;
+  }
+  .tree {
+    margin: 12px 0 0 12px;
+    padding-left: 16px;
+    border-left: 1px solid #a0b7ac;
+  }
+  .branch {
+    padding-top: 0;
+  }
+  .branch::after {
+    left: -16px;
+    top: 20px;
+    width: 16px;
+    height: 0;
+    border-top: 1px solid #a0b7ac;
   }
 }

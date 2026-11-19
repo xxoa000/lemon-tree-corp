@@ -125,9 +125,9 @@ def remap_seeded_accounts(
 def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> None:
     """식별자와 제약 조건을 확인하고 적용 모드에서만 대상에 씁니다."""
     revision = db.scalar(text("SELECT version_num FROM alembic_version"))
-    if revision not in {"0003", "0004", "0005", "0006"}:
+    if revision not in {"0003", "0004", "0005", "0006", "0007"}:
         raise ValueError(
-            "대상 MySQL에 지원하는 Alembic 리비전(0003~0006)을 먼저 적용하세요."
+            "대상 MySQL에 지원하는 Alembic 리비전(0003~0007)을 먼저 적용하세요."
         )
 
     metadata = MetaData()
@@ -143,7 +143,7 @@ def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> Non
     if any(engines.get(name) != "InnoDB" for name in TABLES):
         raise ValueError("대상 업무 테이블이 모두 InnoDB여야 합니다.")
 
-    if revision in {"0005", "0006"}:
+    if revision in {"0005", "0006", "0007"}:
         source = remap_seeded_accounts(db, tables["accounts"], source)
 
     task_events = tables["task_events"]
@@ -158,11 +158,11 @@ def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> Non
             row = original
             if (
                 name == "tasks"
-                and revision == "0006"
+                and revision in {"0006", "0007"}
                 and row["assignee_id"] == "LT-011"
             ):
                 row = {**row, "assignee_id": ""}
-            if name == "accounts" and revision in {"0004", "0005", "0006"}:
+            if name == "accounts" and revision in {"0004", "0005", "0006", "0007"}:
                 row = {
                     "role": "member",
                     "employee_id": None,
@@ -179,7 +179,11 @@ def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> Non
             key = row["id"]
             current = existing.get(key)
             seed = SEED_ROWS.get(key) if name == "tasks" else None
-            if seed and revision == "0006" and seed["assignee_id"] == "LT-011":
+            if (
+                seed
+                and revision in {"0006", "0007"}
+                and seed["assignee_id"] == "LT-011"
+            ):
                 seed = {**seed, "assignee_id": ""}
             if current == row:
                 skipped += 1

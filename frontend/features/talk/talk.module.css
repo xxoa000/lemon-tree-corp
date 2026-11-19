@@ -1,0 +1,54 @@
+@reference 'tailwindcss';
+
+.talk {
+  @apply grid gap-4 sm:grid-cols-[minmax(145px,1fr)_minmax(0,2fr)];
+}
+
+.sidebar {
+  @apply min-w-0 rounded-xl bg-green-50 p-3;
+}
+
+.room {
+  @apply my-1 flex w-full justify-between gap-2 rounded-md border-0 bg-transparent p-2 text-left;
+  overflow-wrap: anywhere;
+}
+
+.room:hover,
+.room[aria-pressed='true'] {
+  @apply bg-green-100;
+}
+
+.room b {
+  @apply rounded-full bg-red-700 px-2 text-white;
+}
+
+.conversation {
+  @apply min-w-0 rounded-xl border border-green-100 p-3;
+}
+
+.messages {
+  @apply flex max-h-[45vh] min-h-32 list-none flex-col gap-2 overflow-auto p-0;
+}
+
+.messages li {
+  @apply w-fit max-w-[90%] self-start rounded-xl bg-slate-100 px-3 py-2;
+  overflow-wrap: anywhere;
+}
+
+.messages li[data-mine='true'] {
+  @apply self-end bg-green-100;
+}
+
+.messages p {
+  @apply m-0 whitespace-pre-wrap;
+}
+
+.invite,
+.send {
+  @apply flex min-w-0 gap-2;
+}
+
+.send input,
+.invite select {
+  @apply min-w-0 flex-1 rounded-md border border-green-200 p-2;
+}

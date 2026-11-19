@@ -18,6 +18,8 @@ import {
   type Employee,
   type Team,
 } from '../features/org/org-api';
+import { Talk, useTalk } from '../features/talk/talk';
+import { Vlog } from '../features/vlog/vlog';
 import { Plan } from '../features/plan/plan';
 import { Board } from '../features/task/task';
 import {
@@ -27,9 +29,9 @@ import {
   type Task,
 } from '../features/task/task-api';
 
-const sections = ['회사', '일정', '업무', '공고'] as const;
+const sections = ['회사', '일정', '업무', '공고', 'TechVlog'] as const;
 type Section = (typeof sections)[number];
-const symbols = { 회사: '▦', 일정: '◫', 업무: '☷', 공고: '◇' };
+const symbols = { 회사: '▦', 일정: '◫', 업무: '☷', 공고: '◇', TechVlog: '✎' };
 
 export default function Workspace() {
   const [section, setSection] = useState<Section>('회사');
@@ -39,6 +41,9 @@ export default function Workspace() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Employee | null>(null);
+  const [talkOpen, setTalkOpen] = useState(false);
+  const talk = useTalk(session?.employee_id);
+  const unread = talk.rooms.reduce((sum, room) => sum + room.unread, 0);
   const [myPageOpen, setMyPageOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
@@ -84,8 +89,18 @@ export default function Workspace() {
     setProfile(null);
     setLoginOpen(false);
     setMyPageOpen(false);
+    setTalkOpen(false);
     setStartOpen(false);
     setError('');
+  }
+
+  function openTalk() {
+    setStartOpen(false);
+    setProfile(null);
+    setMyPageOpen(false);
+    setError('');
+    if (session?.employee_id.startsWith('acct:')) setTalkOpen(true);
+    else setLoginOpen(true);
   }
 
   async function login(event: FormEvent<HTMLFormElement>) {
@@ -109,6 +124,7 @@ export default function Workspace() {
       await deleteSession();
       setSession(null);
       setMyPageOpen(false);
+      setTalkOpen(false);
       setMine(false);
       setProfile(null);
     } catch (error) {
@@ -162,11 +178,18 @@ export default function Workspace() {
           <div className="account">
             <button
               className="talk"
-              disabled
-              title="LemonTalk는 후속 개발 예정입니다"
-              aria-label="LemonTalk 준비 중"
+              type="button"
+              aria-label={
+                unread ? `LemonTalk, 읽지 않은 메시지 ${unread}개` : 'LemonTalk'
+              }
+              onClick={openTalk}
             >
-              <span className="brand-mark" />
+              <span className="brand-mark" aria-hidden="true" />
+              {unread > 0 && (
+                <span className="talk-unread" aria-hidden="true">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
             </button>
             {session ? (
               <>
@@ -237,6 +260,7 @@ export default function Workspace() {
               onSelect={setProfile}
             />
           )}
+          {section === 'TechVlog' && <Vlog session={session} />}
           {section === '공고' && (
             <Jobs
               key={session?.employee_id ?? 'guest'}
@@ -268,7 +292,7 @@ export default function Workspace() {
             >
               내 업무
             </button>
-            <button disabled>LemonTalk · 준비 중</button>
+            <button onClick={openTalk}>LemonTalk</button>
           </nav>
         )}
         <time>
@@ -278,12 +302,16 @@ export default function Workspace() {
           })}
         </time>
       </footer>
-      {(profile || loginOpen || myPageOpen) && (
+      {(profile || loginOpen || myPageOpen || talkOpen) && (
         <dialog
+          className={
+            talkOpen ? 'talk-dialog' : profile ? 'resume-dialog' : undefined
+          }
           ref={(element) => {
             if (element && !element.open) element.showModal();
           }}
           onClose={() => {
+            setTalkOpen(false);
             setMyPageOpen(false);
             setProfile(null);
             setLoginOpen(false);
@@ -295,6 +323,8 @@ export default function Workspace() {
           </form>
           {loginOpen ? (
             <Login login={login} error={error} busy={busy} />
+          ) : talkOpen ? (
+            <Talk {...talk} />
           ) : myPageOpen ? (
             <MyPage />
           ) : (
