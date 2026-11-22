@@ -7,30 +7,29 @@ import {
   apply,
   getApplications,
   getPostings,
+  prepareQuestion,
+  stages,
 } from './jobs-api';
+import type { Employee } from '../org/org-api';
+import { AnswerReview } from './jobs-review';
 import styles from './jobs.module.css';
-
-const stages: Record<string, string> = {
-  screen_failed: '서류 불합격',
-  technical: '1차 기술 면접',
-  technical_failed: '기술 면접 불합격',
-  behavioral: '2차 인성 면접',
-  behavioral_failed: '인성 면접 불합격',
-  hired: '최종 합격',
-};
 
 export function Jobs({
   employeeId,
   onLogin,
+  people,
 }: {
   employeeId?: string;
   onLogin: () => void;
+  people: ReadonlyMap<string, Employee>;
 }) {
   const [postings, setPostings] = useState<Posting[]>([]);
   const [role, setRole] = useState('backend');
   const [applications, setApplications] = useState<Application[]>([]);
   const [selected, setSelected] = useState<number>();
   const [error, setError] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [grading, setGrading] = useState(false);
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
@@ -67,6 +66,53 @@ export function Jobs({
   const active =
     applications.find((row) => row.id === selected) ?? applications[0];
 
+  const activeId = active?.id;
+  const needsQuestion = Boolean(
+    active &&
+    !active.question &&
+    ['technical', 'behavioral'].includes(active.stage),
+  );
+
+  useEffect(() => {
+    if (!activeId || !needsQuestion) {
+      setGenerating(false);
+      return;
+    }
+    let current = true;
+    setGenerating(true);
+    prepareQuestion(activeId)
+      .then((row) => {
+        if (current)
+          setApplications((items) =>
+            items.map((item) => (item.id === row.id ? row : item)),
+          );
+      })
+      .catch((cause) => {
+        if (current) setError(cause.message);
+      })
+      .finally(() => {
+        if (current) setGenerating(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [activeId, needsQuestion, active?.stage]);
+
+  async function retryQuestion(id: number) {
+    setError('');
+    setGenerating(true);
+    try {
+      const row = await prepareQuestion(id);
+      setApplications((items) =>
+        items.map((item) => (item.id === row.id ? row : item)),
+      );
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
   async function submitApplication(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -95,6 +141,7 @@ export function Jobs({
       new FormData(event.currentTarget).get('answer') ?? '',
     );
     setPending(true);
+    setGrading(true);
     setError('');
     try {
       const updated = await answerQuestion(
@@ -109,6 +156,7 @@ export function Jobs({
       setError((cause as Error).message);
     } finally {
       setPending(false);
+      setGrading(false);
     }
   }
 
@@ -157,8 +205,8 @@ export function Jobs({
               을 평가하고, 인성 면접은 협업·행동과 결과·마감 대응을 확인합니다.
             </p>
             <p>
-              면접은 질문마다 25자 이상의 구체적인 답변을 평가합니다. 질문당 세
-              항목 중 하나 이상, 전형당 총 4/6점 이상이면 통과합니다.
+              로컬 AI가 질문별 세 항목을 답변의 설명과 근거로 평가합니다. 질문당
+              한 항목 이상, 전형당 총 4/6점 이상이면 통과합니다.
             </p>
           </details>
           {employeeId ? (
@@ -191,7 +239,7 @@ export function Jobs({
             지원 내역
             <select
               value={active.id}
-              disabled={pending}
+              disabled={pending || generating}
               onChange={(event) => setSelected(Number(event.target.value))}
             >
               {applications.map((row) => (
@@ -206,6 +254,29 @@ export function Jobs({
           </label>
           <h3>{stages[active.stage]}</h3>
           <p role="status">{active.feedback}</p>
+          {active.latest_evaluation && active.latest_answer && (
+            <details>
+              <summary>
+                최근 AI 평가 · {active.latest_evaluation.score}/3점
+              </summary>
+              <AnswerReview
+                answer={active.latest_answer}
+                evaluation={active.latest_evaluation}
+                people={people}
+              />
+            </details>
+          )}
+          {needsQuestion &&
+            (generating ? (
+              <p role="status">로컬 AI가 질문을 작성하는 중입니다…</p>
+            ) : (
+              <button
+                className="action"
+                onClick={() => void retryQuestion(active.id)}
+              >
+                질문 생성 다시 시도
+              </button>
+            ))}
           {active.question && (
             <form
               className={styles.form}
@@ -219,7 +290,7 @@ export function Jobs({
                 <textarea name="answer" rows={5} required maxLength={3000} />
               </label>
               <button className="action" disabled={pending}>
-                답변 제출
+                {grading ? '로컬 AI 채점 중…' : '답변 제출'}
               </button>
             </form>
           )}

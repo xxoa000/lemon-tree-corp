@@ -1,0 +1,18 @@
+@reference 'tailwindcss';
+
+.practice {
+  @apply grid items-start gap-4 lg:grid-cols-[minmax(200px,1fr)_minmax(0,2fr)];
+  overflow-wrap: anywhere;
+}
+
+.practice nav button {
+  @apply my-1 block w-full rounded-lg border-0 bg-green-50 p-2 text-left;
+}
+
+.practice nav button[aria-pressed='true'] {
+  @apply bg-green-100;
+}
+
+.editor {
+  @apply w-full rounded-md border border-green-200 bg-neutral-50 p-3 font-mono;
+}

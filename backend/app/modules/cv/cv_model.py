@@ -25,3 +25,8 @@ class Resume(Base):
         Text().with_variant(MEDIUMTEXT(), "mysql"),
         comment="확인 및 수정 가능한 이력서 텍스트",
     )
+
+    sections: Mapped[str | None] = mapped_column(
+        Text().with_variant(MEDIUMTEXT(), "mysql"),
+        comment="직접 작성한 이력서 항목 JSON",
+    )

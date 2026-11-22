@@ -35,7 +35,7 @@ def upload(
 def edit(data: ResumeEdit, request: Request, subject: Subject) -> ResumeView:
     """이력서 초안의 텍스트를 갱신합니다."""
     return cv_service.edit(
-        request.app.state.workplace_engine, account_id(subject), data.content
+        request.app.state.workplace_engine, account_id(subject), data
     )
 
 

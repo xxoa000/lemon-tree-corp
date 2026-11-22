@@ -8,17 +8,24 @@ import {
   uploadAvatar,
 } from './mypg-api';
 import { Budgets } from '../llm/llm';
+import type { Employee } from '../org/org-api';
+import { InterviewRecords } from '../jobs/jobs-review';
 import { ResumeManager } from '../cv/cv';
 import styles from './mypg.module.css';
 
-export function MyPage() {
-  const [tab, setTab] = useState<'profile' | 'resume'>('profile');
+export function MyPage({ people }: { people: ReadonlyMap<string, Employee> }) {
+  const [tab, setTab] = useState<'profile' | 'resume' | 'interviews'>(
+    'profile',
+  );
   const [profile, setProfile] = useState<Profile>();
   const [avatarVersion, setAvatarVersion] = useState(0);
   const [budgetsOpen, setBudgetsOpen] = useState(false);
   const [staff, setStaff] = useState<Awaited<ReturnType<typeof getStaff>>>();
   const [error, setError] = useState('');
-  const [status, setStatus] = useState('');
+  const [toast, setToast] = useState<{
+    text: string;
+    type: 'success' | 'error';
+  }>();
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
@@ -35,14 +42,22 @@ export function MyPage() {
     };
   }, []);
 
-  async function perform(action: () => Promise<void>) {
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(undefined), 1000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  async function perform(action: () => Promise<void>, message?: string) {
     setError('');
-    setStatus('');
+    setToast(undefined);
     setPending(true);
     try {
       await action();
+      if (message) setToast({ text: message, type: 'success' });
     } catch (cause) {
       setError((cause as Error).message);
+      if (message) setToast({ text: '저장하지 못했습니다.', type: 'error' });
     } finally {
       setPending(false);
     }
@@ -53,8 +68,7 @@ export function MyPage() {
     const data = Object.fromEntries(new FormData(event.currentTarget));
     void perform(async () => {
       setProfile(await saveProfile(data));
-      setStatus('회원정보를 저장했습니다.');
-    });
+    }, '회원정보를 저장했습니다.');
   }
 
   function submitAvatar(event: FormEvent<HTMLFormElement>) {
@@ -66,13 +80,21 @@ export function MyPage() {
       setProfile((current) => current && { ...current, has_avatar: true });
       setAvatarVersion((current) => current + 1);
       form.reset();
-      setStatus('프로필 사진을 저장했습니다.');
-    });
+    }, '프로필 사진을 저장했습니다.');
   }
 
   return (
     <>
-      <h2 id="dialog-heading">마이페이지</h2>
+      <h2 id="dialog-heading" data-wide={tab !== 'profile'}>
+        마이페이지
+      </h2>
+      <div className={styles.toastArea} aria-live="polite" aria-atomic="true">
+        {toast && (
+          <p className={styles.toast} data-type={toast.type}>
+            {toast.text}
+          </p>
+        )}
+      </div>
       <nav aria-label="마이페이지 메뉴" className={styles.tabs}>
         <button
           className="action"
@@ -88,15 +110,36 @@ export function MyPage() {
         >
           이력서 관리
         </button>
+        <button
+          className="action"
+          aria-pressed={tab === 'interviews'}
+          onClick={() => setTab('interviews')}
+        >
+          모의면접 기록
+        </button>
       </nav>
-      {tab === 'resume' && <ResumeManager />}
+      {tab === 'resume' && profile && (
+        <ResumeManager
+          name={profile.display_name}
+          email={profile.email}
+          phone={profile.phone}
+          avatar={
+            profile.has_avatar
+              ? `/api/v1/accounts/me/avatar?v=${avatarVersion}`
+              : undefined
+          }
+        />
+      )}
+      {tab === 'resume' && !profile && (
+        <p role="status">{error || '회원정보를 불러오는 중입니다.'}</p>
+      )}
+      {tab === 'interviews' && <InterviewRecords people={people} />}
       <div hidden={tab !== 'profile'}>
         {error && (
           <p role="alert" className="error">
             {error}
           </p>
         )}
-        {status && <p role="status">{status}</p>}
         {profile ? (
           <>
             {profile.has_avatar && (

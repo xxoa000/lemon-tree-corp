@@ -8,6 +8,7 @@ import {
   getSession,
   type Session,
 } from '../features/auth/auth-api';
+import { CodePractice } from '../features/code/code';
 import { MyPage } from '../features/mypg/mypg';
 import { Jobs } from '../features/jobs/jobs';
 import { Org, Profile } from '../features/org/org';
@@ -30,7 +31,7 @@ import {
 } from '../features/task/task-api';
 
 const sections = ['회사', '일정', '업무', '공고', 'TechVlog'] as const;
-type Section = (typeof sections)[number];
+type Section = (typeof sections)[number] | '코딩 테스트';
 const symbols = { 회사: '▦', 일정: '◫', 업무: '☷', 공고: '◇', TechVlog: '✎' };
 
 export default function Workspace() {
@@ -260,9 +261,16 @@ export default function Workspace() {
               onSelect={setProfile}
             />
           )}
+          {section === '코딩 테스트' && (
+            <CodePractice
+              key={session?.employee_id ?? 'guest'}
+              signedIn={Boolean(session?.employee_id.startsWith('acct:'))}
+            />
+          )}
           {section === 'TechVlog' && <Vlog session={session} />}
           {section === '공고' && (
             <Jobs
+              people={people}
               key={session?.employee_id ?? 'guest'}
               employeeId={session?.employee_id}
               onLogin={() => {
@@ -293,6 +301,7 @@ export default function Workspace() {
               내 업무
             </button>
             <button onClick={openTalk}>LemonTalk</button>
+            <button onClick={() => go('코딩 테스트')}>코딩 테스트</button>
           </nav>
         )}
         <time>
@@ -326,7 +335,7 @@ export default function Workspace() {
           ) : talkOpen ? (
             <Talk {...talk} />
           ) : myPageOpen ? (
-            <MyPage />
+            <MyPage people={people} />
           ) : (
             profile && <Profile profile={profile} />
           )}

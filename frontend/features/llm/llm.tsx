@@ -17,6 +17,7 @@ export function Budgets() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const allocated = budgets.reduce((sum, row) => sum + row.monthly_limit, 0);
   const budget = budgets.find((row) => row.employee_id === selected);
 
   useEffect(() => {
@@ -58,6 +59,11 @@ export function Budgets() {
   return (
     <section aria-label="모의 LLM 예산">
       <p className="muted">가상 금액이며 실제 모델 API는 호출하지 않습니다.</p>
+      {budgets.length > 0 && (
+        <p>
+          전체 월 배정액 · {allocated.toLocaleString('ko-KR')} / 50,000 가상 원
+        </p>
+      )}
       {error && (
         <p className="error" role="alert">
           {error}

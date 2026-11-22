@@ -26,3 +26,20 @@
 .tabs button[aria-pressed='true'] {
   @apply outline-2 outline-offset-2 outline-green-600;
 }
+
+.toastArea {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 3000;
+  max-width: calc(100vw - 2rem);
+  pointer-events: none;
+}
+
+.toast {
+  @apply m-0 rounded-md border border-green-700 bg-white px-4 py-2 text-green-950 shadow-md;
+}
+
+.toast[data-type='error'] {
+  @apply border-red-700 text-red-900;
+}

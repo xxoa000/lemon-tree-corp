@@ -1,5 +1,7 @@
 """이력서 텍스트를 읽고 모의 선발의 질문과 단계를 관리합니다."""
 
+import json
+import re
 from io import BytesIO
 from pathlib import PurePath
 
@@ -11,56 +13,21 @@ from sqlalchemy.orm import Session
 
 from app.database import lock_sqlite_write
 
-from .jobs_model import Application, InterviewAnswer
-from .jobs_roles import AI, FRONTEND, FULLSTACK
-from .jobs_schemas import Answer, ApplicationView, Posting, Question
+from .jobs_evaluator import evaluate, generate_question
+from .jobs_model import Application, InterviewAnswer, InterviewQuestion
+from .jobs_roles import AI, CULT, FRONTEND, FULLSTACK, TECH
+from .jobs_schemas import (
+    Answer,
+    ApplicationView,
+    Evaluation,
+    InterviewEntry,
+    InterviewHistory,
+    Posting,
+    Question,
+)
 
 MAX_SIZE = 2 * 1024 * 1024
 MAX_PAGES = 10
-TECH = (
-    (
-        "tech-api",
-        "이준혁 과장 · 백엔드",
-        "지원서에 나온 경험을 바탕으로 조회 API를 설계해 주세요. 존재하지 않는 리소스와 잘못된 입력에 어떻게 응답하고, 각각 어떻게 검증하겠습니까?",
-        (
-            ("404", "찾을 수 없"),
-            ("400", "422", "유효성", "validation"),
-            ("테스트", "test", "검증"),
-        ),
-    ),
-    (
-        "tech-db",
-        "박현우 부장 · 데이터베이스",
-        "같은 지원서를 두 번 제출하는 상황에서 API의 중복 처리 방식을 설계하고, 동시에 요청이 들어와도 일관성을 유지하는 방법을 설명해 주세요.",
-        (
-            ("고유", "unique", "유니크", "멱등", "idempot"),
-            ("트랜잭션", "transaction", "원자"),
-            ("충돌", "재시도", "중복", "409"),
-        ),
-    ),
-)
-CULT = (
-    (
-        "cult-feedback",
-        "윤서진 과장 · 프로젝트 관리",
-        "지원서에 나온 프로젝트를 예로 들어, 동료와 의견이 달랐던 상황이나 코드 리뷰 지적을 받은 상황에서 어떤 행동을 했고 결과가 어땠는지 설명해 주세요.",
-        (
-            ("의견", "경청", "질문", "피드백", "리뷰"),
-            ("제안", "설명", "논의", "합의"),
-            ("결과", "개선", "배웠", "변경"),
-        ),
-    ),
-    (
-        "cult-deadline",
-        "이준혁 과장 · 백엔드",
-        "마감일을 지키기 어려울 때, 무엇을 확인하고 누구에게 무엇을 공유하며 어떤 대안을 제시하겠습니까?",
-        (
-            ("공유", "알리", "보고", "소통"),
-            ("이유", "원인", "일정", "영향"),
-            ("우선순위", "대안", "범위", "분할"),
-        ),
-    ),
-)
 TECH_BY_ROLE = {"backend": TECH, "frontend": FRONTEND, "fullstack": FULLSTACK, "ai": AI}
 ROLE_DETAILS = {
     "backend": (
@@ -157,48 +124,36 @@ def read_resume(upload: UploadFile) -> tuple[str, str]:
     return filename, resume
 
 
-def application_view(db: Session, row: Application) -> ApplicationView:
-    """현재 단계 및 아직 응답하지 않은 질문을 제공합니다."""
+def unanswered(db: Session, row: Application):
+    """현재 전형에서 아직 답하지 않은 첫 번째 질문 슬롯을 반환합니다."""
     answered = set(
         db.scalars(
             select(InterviewAnswer.question_id).where(
-                InterviewAnswer.application_id == row.id
-            ),
+                InterviewAnswer.application_id == row.id,
+            )
         )
     )
-    question = None
-    for index, (key, interviewer, prompt, _) in enumerate(questions_for(row)):
-        if key not in answered:
-            if index == 0 and row.resume:
-                lines = row.resume.splitlines()
-                relevant = next(
-                    (
-                        line
-                        for line in lines
-                        if any(
-                            word in line.lower()
-                            for word in (
-                                "api",
-                                "프로젝트",
-                                "백엔드",
-                                "데이터베이스",
-                                "python",
-                            )
-                        )
-                    ),
-                    lines[0],
-                )
-                prompt = f"이력서에서 확인한 내용: “{relevant[:180]}”\n\n{prompt}"
-            if not row.resume:
-                prompt = prompt.replace(
-                    "지원서에 나온 경험을 바탕으로", "가상의 프로젝트를 예로 들어"
-                )
-                prompt = prompt.replace(
-                    "지원서에 나온 프로젝트를 예로 들어",
-                    "실제 또는 가상의 프로젝트를 예로 들어",
-                )
-            question = Question(id=key, interviewer=interviewer, prompt=prompt)
-            break
+    return next((item for item in questions_for(row) if item[0] not in answered), None)
+
+
+def application_view(db: Session, row: Application) -> ApplicationView:
+    """현재 전형과 저장된 다음 질문, 최근 평가를 반환합니다."""
+    slot = unanswered(db, row)
+    stored = db.get(InterviewQuestion, (row.id, slot[0])) if slot else None
+    question = (
+        Question(id=stored.question_id, interviewer=slot[1], prompt=stored.prompt)
+        if stored and slot
+        else None
+    )
+    latest = db.scalar(
+        select(InterviewAnswer)
+        .where(
+            InterviewAnswer.application_id == row.id,
+            InterviewAnswer.evaluation.is_not(None),
+        )
+        .order_by(InterviewAnswer.id.desc())
+        .limit(1)
+    )
     return ApplicationView(
         id=row.id,
         role=row.role,
@@ -207,6 +162,10 @@ def application_view(db: Session, row: Application) -> ApplicationView:
         feedback=row.feedback,
         created_at=str(row.created_at),
         question=question,
+        latest_evaluation=Evaluation.model_validate_json(latest.evaluation)
+        if latest and latest.evaluation
+        else None,
+        latest_answer=latest.answer if latest else None,
     )
 
 
@@ -261,6 +220,113 @@ def apply(
         return application_view(db, row)
 
 
+def owned_application(
+    db: Session, application_id: int, applicant: str, *, lock: bool = False
+) -> Application:
+    """지원 소유자가 맞을 때만 해당 지원 건을 반환합니다."""
+    row = db.get(Application, application_id, with_for_update=lock)
+    if row is None or row.applicant != applicant:
+        raise HTTPException(404, "지원 정보를 찾을 수 없습니다.")
+    return row
+
+
+def prepare_question(
+    engine: Engine, applicant: str, application_id: int
+) -> ApplicationView:
+    """현재 슬롯의 질문을 생성하고 동시에 요청되어도 하나만 저장합니다."""
+    with Session(engine) as db:
+        row = owned_application(db, application_id, applicant)
+        slot = unanswered(db, row)
+        if slot is None or db.get(InterviewQuestion, (row.id, slot[0])) is not None:
+            return application_view(db, row)
+        role, stage = row.role, row.stage
+        text = re.sub(
+            r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "[이메일 생략]", row.resume[:2500]
+        )
+        excerpt = re.sub(r"(?<!\w)\+?\d[\d ()-]{7,}\d", "[연락처 생략]", text)
+        previous = list(
+            db.scalars(
+                select(InterviewQuestion.prompt).where(
+                    InterviewQuestion.application_id == row.id
+                )
+            )
+        )
+    key, _, topic, criteria = slot
+    if not excerpt:
+        topic = topic.replace("지원서에 나온", "실제 또는 가상의")
+    result = generate_question(role, stage, topic, criteria, excerpt, previous)
+    with Session(engine) as db, db.begin():
+        lock_sqlite_write(db)
+        row = owned_application(db, application_id, applicant, lock=True)
+        current = unanswered(db, row)
+        if (
+            current
+            and current[0] == key
+            and not db.get(InterviewQuestion, (row.id, key))
+        ):
+            db.add(
+                InterviewQuestion(
+                    application_id=row.id,
+                    question_id=key,
+                    prompt=result.prompt,
+                    criteria=json.dumps(result.criteria, ensure_ascii=False),
+                )
+            )
+            db.flush()
+        return application_view(db, row)
+
+
+def history(engine: Engine, applicant: str, application_id: int) -> InterviewHistory:
+    """현재 계정이 소유한 면접의 전체 답변과 피드백을 조회합니다."""
+    with Session(engine) as db:
+        row = owned_application(db, application_id, applicant)
+        questions = {
+            item.question_id: item.prompt
+            for item in db.scalars(
+                select(InterviewQuestion).where(
+                    InterviewQuestion.application_id == row.id
+                )
+            )
+        }
+        legacy = {key: prompt for key, _, prompt, _ in (*TECH_BY_ROLE[row.role], *CULT)}
+        answers = [
+            InterviewEntry(
+                question_id=item.question_id,
+                prompt=questions.get(
+                    item.question_id, legacy.get(item.question_id, item.question_id)
+                ),
+                answer=item.answer,
+                score=item.score,
+                evaluation=Evaluation.model_validate_json(item.evaluation)
+                if item.evaluation
+                else None,
+            )
+            for item in db.scalars(
+                select(InterviewAnswer)
+                .where(InterviewAnswer.application_id == row.id)
+                .order_by(InterviewAnswer.id)
+            )
+        ]
+        return InterviewHistory(application=application_view(db, row), answers=answers)
+
+
+def current_question(
+    db: Session,
+    application_id: int,
+    applicant: str,
+    question_id: str,
+    *,
+    for_update: bool = False,
+) -> tuple[Application, InterviewQuestion]:
+    """답변 소유권과 아직 응답 가능한 질문인지 확인합니다."""
+    row = owned_application(db, application_id, applicant, lock=for_update)
+    slot = unanswered(db, row)
+    question = db.get(InterviewQuestion, (row.id, question_id))
+    if slot is None or slot[0] != question_id or question is None:
+        raise HTTPException(409, "현재 질문이 변경됐거나 아직 생성되지 않았습니다.")
+    return row, question
+
+
 def submit_answer(
     engine: Engine, applicant: str, application_id: int, data: Answer
 ) -> ApplicationView:
@@ -268,34 +334,32 @@ def submit_answer(
     answer = data.answer.strip()
     if not answer:
         raise HTTPException(422, "답변을 입력해 주세요.")
+    with Session(engine) as db:
+        row, question = current_question(
+            db, application_id, applicant, data.question_id
+        )
+        stage_questions = questions_for(row)
+        index = next(
+            index
+            for index, item in enumerate(stage_questions)
+            if item[0] == data.question_id
+        )
+        prompt = question.prompt
+        criteria = tuple(json.loads(question.criteria))
+    evaluation = evaluate(data.question_id, prompt, criteria, answer)
+
     with Session(engine) as db, db.begin():
         lock_sqlite_write(db)
-        row = db.get(Application, application_id, with_for_update=True)
-        if row is None or row.applicant != applicant:
-            raise HTTPException(404, "지원 정보를 찾을 수 없습니다.")
-        question = application_view(db, row).question
-        if question is None or question.id != data.question_id:
-            raise HTTPException(
-                409, "현재 질문이 변경되었습니다. 지원 목록을 다시 확인해 주세요."
-            )
-
-        stage_questions = questions_for(row)
-        index, rubric = next(
-            (i, rubric)
-            for i, (key, _, _, rubric) in enumerate(stage_questions)
-            if key == question.id
-        )
-        score = (
-            sum(any(keyword in answer.lower() for keyword in group) for group in rubric)
-            if len(answer) >= 25
-            else 0
+        row, _ = current_question(
+            db, application_id, applicant, data.question_id, for_update=True
         )
         db.add(
             InterviewAnswer(
                 application_id=row.id,
-                question_id=question.id,
+                question_id=data.question_id,
                 answer=answer,
-                score=score,
+                score=evaluation.score,
+                evaluation=evaluation.model_dump_json(),
             )
         )
         db.flush()

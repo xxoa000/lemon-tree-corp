@@ -9,6 +9,7 @@ from redis.exceptions import RedisError
 
 from app.database import create_workplace_engine, upgrade_workplace
 from app.modules.auth.auth_router import router as auth_router
+from app.modules.code.code_router import router as code_router
 from app.modules.cv.cv_router import router as cv_router
 from app.modules.jobs.jobs_router import router as jobs_router
 from app.modules.llm.llm_router import router as llm_router
@@ -36,6 +37,7 @@ app.include_router(auth_router)
 app.include_router(vlog_router)
 app.include_router(talk_router)
 app.include_router(cv_router)
+app.include_router(code_router)
 app.include_router(jobs_router)
 app.include_router(llm_router)
 app.include_router(task_router)

@@ -1,9 +1,16 @@
 """가입, 자격 증명 복구와 모의 채용의 주요 흐름을 검증합니다."""
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.modules.jobs import jobs_service
+from app.modules.jobs.jobs_schemas import (
+    CriterionAssessment,
+    Evaluation,
+    GeneratedQuestion,
+)
 
 PASSWORD = "original-password"
 RESUME = (
@@ -16,6 +23,44 @@ ANSWERS = (
     "코드 리뷰 의견을 경청하고 대안을 제안했습니다. 합의 결과 오류 처리가 개선되었습니다.",
     "영향과 원인을 먼저 파악한 뒤 팀에 공유하고 우선순위와 분할 가능한 범위 등 대안을 제시하겠습니다.",
 )
+
+
+@pytest.fixture(autouse=True)
+def fixed_grader(monkeypatch):
+    """채용 흐름 테스트는 모델 서버 대신 고정 평가 결과를 사용합니다."""
+
+    def evaluate(question_id, prompt, criteria, answer):
+        """기존 합격/불합격 시나리오를 재현합니다."""
+        met = answer != "모르겠습니다"
+        return Evaluation(
+            question_id=question_id,
+            labels=list(criteria),
+            score=3 if met else 0,
+            criteria=[
+                CriterionAssessment(met=met, evidence=answer[:25] if met else "")
+                for _ in criteria
+            ],
+            feedback="테스트 평가",
+        )
+
+    def generate(role, stage, topic, criteria, experience, previous):
+        """면접 질문 생성기를 대신해 슬롯마다 다른 응답을 반환합니다."""
+        return GeneratedQuestion(
+            prompt=f"{role} {stage} 질문 {len(previous) + 1} {experience[:80]}",
+            criteria=list(criteria),
+        )
+
+    monkeypatch.setattr(jobs_service, "evaluate", evaluate)
+    monkeypatch.setattr(jobs_service, "generate_question", generate)
+
+
+def prepare(client: TestClient, row: dict) -> dict:
+    """답변 전에 해당 슬롯의 질문을 생성합니다."""
+    response = client.post(f"/api/v1/jobs/applications/{row['id']}/question")
+    assert response.status_code == 200
+    ready = response.json()
+    assert ready["question"]
+    return ready
 
 
 def register(client: TestClient, username: str) -> str:
@@ -85,6 +130,7 @@ def test_interview_and_reapplication(tmp_path, monkeypatch):
         technical_fail = client.post(url, files=file).json()
         endpoint = f"{url}/{technical_fail['id']}/answers"
         for _ in range(2):
+            technical_fail = prepare(client, technical_fail)
             technical_fail = client.post(
                 endpoint,
                 json={
@@ -97,7 +143,10 @@ def test_interview_and_reapplication(tmp_path, monkeypatch):
         row = client.post(url, files=file).json()
         endpoint = f"{url}/{row['id']}/answers"
         assert row["stage"] == "technical"
+        assert row["question"] is None
+        row = prepare(client, row)
         assert "FastAPI 프로젝트" in row["question"]["prompt"]
+        assert prepare(client, row)["question"] == row["question"]
         assert (
             client.post(
                 endpoint, json={"question_id": "invalid", "answer": ANSWERS[0]}
@@ -107,16 +156,23 @@ def test_interview_and_reapplication(tmp_path, monkeypatch):
         for answer, stage in zip(
             ANSWERS, ["technical", "behavioral", "behavioral", "hired"], strict=True
         ):
+            row = prepare(client, row)
             row = client.post(
                 endpoint, json={"question_id": row["question"]["id"], "answer": answer}
             ).json()
             assert row["stage"] == stage
         assert row["question"] is None
         assert len(client.get(url).json()) == 3
+        history = client.get(f"{url}/{row['id']}/history").json()
+        assert history["application"]["stage"] == "hired"
+        assert [entry["answer"] for entry in history["answers"]] == list(ANSWERS)
+        assert all(entry["evaluation"] for entry in history["answers"])
 
         register(client, "another")
         assert login(client, "another").status_code == 200
         assert client.get(url).json() == []
+        assert client.get(f"{url}/{row['id']}/history").status_code == 404
+        assert client.post(f"{url}/{row['id']}/question").status_code == 404
         assert (
             client.post(
                 endpoint, json={"question_id": "tech-api", "answer": ANSWERS[0]}
@@ -182,6 +238,7 @@ def test_role_specific_final_results(
         assert row["role"] == role
         endpoint = f"{url}/{row['id']}/answers"
         for answer in technical_answers:
+            row = prepare(client, row)
             assert row["question"]["id"].startswith(prefix + "-")
             response = client.post(
                 endpoint, json={"question_id": row["question"]["id"], "answer": answer}
@@ -193,6 +250,7 @@ def test_role_specific_final_results(
         for answer in (
             ANSWERS[2:] if expected == "hired" else ("모르겠습니다", "모르겠습니다")
         ):
+            row = prepare(client, row)
             response = client.post(
                 endpoint, json={"question_id": row["question"]["id"], "answer": answer}
             )
@@ -216,10 +274,38 @@ def test_mock_interview_without_resume(tmp_path, monkeypatch):
         assert row["stage"] == "technical"
         assert row["filename"] == ""
         assert "서류 심사를 건너뛰고" in row["feedback"]
-        assert "이력서에서 확인한 내용" not in row["question"]["prompt"]
+        assert row["question"] is None
         path = f"/api/v1/jobs/applications/{row['id']}/answers"
         for answer in ANSWERS:
+            row = prepare(client, row)
             row = client.post(
                 path, json={"question_id": row["question"]["id"], "answer": answer}
             ).json()
         assert row["stage"] == "hired"
+
+
+def test_unavailable_grading_leaves_current_question(tmp_path, monkeypatch):
+    """로컬 모델에 연결할 수 없으면 답변·점수를 저장하거나 전형을 진행하지 않습니다."""
+    monkeypatch.setenv("WORKPLACE_DB_PATH", str(tmp_path / "pending.sqlite3"))
+    monkeypatch.setenv("WORKPLACE_JWT_SECRET", "test-only-account-secret-32-characters")
+
+    def unavailable(*args):
+        raise HTTPException(503, "로컬 채점 서버 재시도")
+
+    monkeypatch.setattr(jobs_service, "evaluate", unavailable)
+    with TestClient(app) as client:
+        register(client, "candidate")
+        login(client, "candidate")
+        row = prepare(
+            client,
+            client.post("/api/v1/jobs/applications", data={"role": "backend"}).json(),
+        )
+        response = client.post(
+            f"/api/v1/jobs/applications/{row['id']}/answers",
+            json={
+                "question_id": row["question"]["id"],
+                "answer": ANSWERS[0],
+            },
+        )
+        assert response.status_code == 503
+        assert client.get("/api/v1/jobs/applications").json()[0] == row

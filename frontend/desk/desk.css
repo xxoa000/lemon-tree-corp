@@ -247,3 +247,7 @@ dialog.resume-dialog {
   top: 0;
   z-index: 1;
 }
+
+dialog:has(#dialog-heading[data-wide='true']) {
+  width: min(840px, calc(100% - 24px));
+}

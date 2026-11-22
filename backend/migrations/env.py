@@ -7,6 +7,7 @@ from sqlalchemy.schema import DefaultClause
 
 from app.database import Base, create_workplace_engine, migration_connection
 from app.modules.auth import auth_model  # noqa: F401
+from app.modules.code import code_model  # noqa: F401
 from app.modules.cv import cv_model  # noqa: F401
 from app.modules.jobs import jobs_model  # noqa: F401
 from app.modules.llm import llm_model  # noqa: F401

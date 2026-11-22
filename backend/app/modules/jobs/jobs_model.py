@@ -60,3 +60,26 @@ class InterviewAnswer(Base):
     )
     answer: Mapped[str] = mapped_column(Text, comment="지원자가 입력한 면접 답변")
     score: Mapped[int] = mapped_column(Integer, comment="질문 평가 기준의 충족 개수")
+
+    evaluation: Mapped[str | None] = mapped_column(
+        Text, comment="로컬 AI의 평가 항목과 피드백 JSON"
+    )
+
+
+class InterviewQuestion(Base):
+    """답변이 제출되기 전에 생성 및 확정한 질문입니다."""
+
+    __tablename__ = "job_questions"
+
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("job_applications.id"),
+        primary_key=True,
+        comment="지원 건 식별자",
+    )
+    question_id: Mapped[str] = mapped_column(
+        String(30), primary_key=True, comment="전형 내 질문 식별자"
+    )
+    prompt: Mapped[str] = mapped_column(Text, comment="생성된 질문 원문")
+    criteria: Mapped[str] = mapped_column(
+        Text, comment="답변 전에 확정한 세 평가 기준 JSON"
+    )

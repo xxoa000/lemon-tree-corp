@@ -317,3 +317,20 @@
     border-top: 1px solid #a0b7ac;
   }
 }
+
+.resumePortrait img {
+  @apply h-full w-full object-cover;
+}
+
+.initials {
+  @apply text-xl text-neutral-700;
+}
+
+.resumeValue {
+  @apply whitespace-pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.resumeContacts dd {
+  overflow-wrap: anywhere;
+}

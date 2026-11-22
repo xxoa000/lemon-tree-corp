@@ -15,6 +15,8 @@ from app.modules.org.org_service import employees, manager
 from .llm_model import Budget, Usage
 from .llm_schemas import BudgetEdit, BudgetView
 
+TOTAL_MONTHLY_LIMIT = 50_000
+
 
 def month_key() -> str:
     """한국 시간 기준으로 현재 예산 월을 반환합니다."""
@@ -118,7 +120,15 @@ def edit_budget(engine: Engine, subject: str, employee: str, data: BudgetEdit) -
         raise HTTPException(403, "관리자 권한이 필요합니다.")
     with Session(engine) as db, db.begin():
         lock_sqlite_write(db)
-        row = db.get(Budget, employee, with_for_update=True)
+        budgets = list(
+            db.scalars(select(Budget).order_by(Budget.employee_id).with_for_update())
+        )
+        row = next(
+            (budget for budget in budgets if budget.employee_id == employee), None
+        )
         if row is None:
             raise HTTPException(404, "직원 예산을 찾을 수 없습니다.")
+        allocated = sum(budget.monthly_limit for budget in budgets)
+        if allocated - row.monthly_limit + data.monthly_limit > TOTAL_MONTHLY_LIMIT:
+            raise HTTPException(422, "전체 월 예산은 50,000원을 초과할 수 없습니다.")
         row.salary, row.monthly_limit = data.salary, data.monthly_limit

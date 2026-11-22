@@ -55,7 +55,7 @@ def test_upgrade_preserves_legacy_tasks_and_events(tmp_path, monkeypatch):
                 connection.exec_driver_sql(
                     "SELECT version_num FROM alembic_version"
                 ).scalar_one()
-                == "0008"
+                == "0010"
             )
     finally:
         engine.dispose()

@@ -125,9 +125,9 @@ def remap_seeded_accounts(
 def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> None:
     """식별자와 제약 조건을 확인하고 적용 모드에서만 대상에 씁니다."""
     revision = db.scalar(text("SELECT version_num FROM alembic_version"))
-    if revision not in {"0003", "0004", "0005", "0006", "0007", "0008"}:
+    if revision not in {"0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010"}:
         raise ValueError(
-            "대상 MySQL에 지원하는 Alembic 리비전(0003~0008)을 먼저 적용하세요."
+            "대상 MySQL에 지원하는 Alembic 리비전(0003~0010)을 먼저 적용하세요."
         )
 
     metadata = MetaData()
@@ -143,7 +143,7 @@ def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> Non
     if any(engines.get(name) != "InnoDB" for name in TABLES):
         raise ValueError("대상 업무 테이블이 모두 InnoDB여야 합니다.")
 
-    if revision in {"0005", "0006", "0007", "0008"}:
+    if revision in {"0005", "0006", "0007", "0008", "0009", "0010"}:
         source = remap_seeded_accounts(db, tables["accounts"], source)
 
     task_events = tables["task_events"]
@@ -158,7 +158,7 @@ def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> Non
             row = original
             if (
                 name == "tasks"
-                and revision in {"0006", "0007", "0008"}
+                and revision in {"0006", "0007", "0008", "0009", "0010"}
                 and row["assignee_id"] == "LT-011"
             ):
                 row = {**row, "assignee_id": ""}
@@ -178,6 +178,12 @@ def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> Non
                     "avatar": None,
                     **row,
                 }
+            if (
+                name == "job_answers"
+                and revision in {"0009", "0010"}
+                and "evaluation" not in row
+            ):
+                row = {**row, "evaluation": None}
             if set(row) != set(table.c.keys()):
                 raise ValueError(
                     f"{name}: 대상 DB와 백업의 컬럼이 다릅니다. 대상 스키마를 업데이트하세요."
@@ -187,7 +193,7 @@ def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> Non
             seed = SEED_ROWS.get(key) if name == "tasks" else None
             if (
                 seed
-                and revision in {"0006", "0007", "0008"}
+                and revision in {"0006", "0007", "0008", "0009", "0010"}
                 and seed["assignee_id"] == "LT-011"
             ):
                 seed = {**seed, "assignee_id": ""}

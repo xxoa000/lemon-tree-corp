@@ -44,6 +44,7 @@ def test_resume_original_and_edits_are_private(clients):
     assert alice.put(url + "/file", files={"file": ("resume.txt", data)}).json() == {
         "filename": "resume.txt",
         "content": data.decode(),
+        "sections": None,
     }
     assert (
         alice.patch(url, json={"content": "Updated project description"}).status_code
@@ -201,8 +202,26 @@ def test_staff_mock_reply_and_persistent_budget(clients, monkeypatch):
     )
     budgets = bobby.get("/api/v1/llm/budgets").json()
     assert len(budgets) == 11
+    assert sum(row["monthly_limit"] for row in budgets) == 50_000
+    assert (
+        next(row for row in budgets if row["employee_id"] == "LT-004")["monthly_limit"]
+        > next(row for row in budgets if row["employee_id"] == "LT-001")[
+            "monthly_limit"
+        ]
+    )
     current = next(row for row in budgets if row["employee_id"] == "LT-SYS-001")
     assert current["used"] > 0
+    assert (
+        bobby.patch(
+            "/api/v1/llm/budgets/LT-SYS-001",
+            json={
+                "salary": current["salary"],
+                "monthly_limit": current["monthly_limit"] + 1,
+            },
+        ).status_code
+        == 422
+    )
+
     assert (
         bobby.patch(
             "/api/v1/llm/budgets/LT-SYS-001",
@@ -224,3 +243,40 @@ def test_staff_mock_reply_and_persistent_budget(clients, monkeypatch):
         == "disabled"
     )
     assert len(alice.get(uri).json()["messages"]) == 4
+
+
+def test_personal_resume_can_be_written_without_file(clients):
+    """원본이 없어도 본인 이력서 양식을 저장하고 다시 볼 수 있습니다."""
+    alice, bobby, _ = clients
+    url = "/api/v1/accounts/me/resume"
+    result = alice.patch(
+        url, json={"sections": {"experience": "로컬 API 구현", "skills": "Python"}}
+    )
+    assert result.status_code == 200
+    assert result.json()["filename"] == ""
+    assert alice.get(url).json()["sections"]["skills"] == "Python"
+    assert alice.get(url + "/file").status_code == 404
+    assert bobby.get(url).json() is None
+
+
+def test_code_practice_saves_only_to_owner(clients):
+    """외부 공식 링크별 코드를 저장하고 다른 계정과 격리합니다."""
+    alice, bobby, _ = clients
+    endpoint = "/api/v1/practice/draft"
+    url = "https://school.programmers.co.kr/learn/courses/30/lessons/1234"
+    payload = {"language": "python", "code": "print(1)"}
+    assert (
+        alice.put(
+            endpoint, params={"problem": url + "?ref=example"}, json=payload
+        ).status_code
+        == 200
+    )
+    assert alice.get(endpoint, params={"problem": url}).json() == payload
+    assert bobby.get(endpoint, params={"problem": url}).json() is None
+    assert alice.get("/api/v1/practice/drafts").json() == [url]
+    assert (
+        alice.put(
+            endpoint, params={"problem": "https://example.org/problem"}, json=payload
+        ).status_code
+        == 422
+    )

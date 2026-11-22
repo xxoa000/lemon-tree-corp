@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFil
 from app.modules.auth.auth_router import session_employee
 
 from . import jobs_service
-from .jobs_schemas import Answer, ApplicationView, Posting
+from .jobs_schemas import Answer, ApplicationView, InterviewHistory, Posting
 
 router = APIRouter(prefix="/api/v1/jobs")
 Applicant = Annotated[str, Depends(session_employee)]
@@ -54,4 +54,25 @@ def answer(
     """현재 면접 질문에 대한 답변을 처리합니다."""
     return jobs_service.submit_answer(
         request.app.state.workplace_engine, applicant, application_id, data
+    )
+
+
+@router.post("/applications/{application_id}/question")
+def question(
+    application_id: int, request: Request, applicant: Applicant
+) -> ApplicationView:
+    """현재 면접 질문을 한 번 생성하여 반환합니다."""
+    return jobs_service.prepare_question(
+        request.app.state.workplace_engine, applicant, application_id
+    )
+
+
+@router.get("/applications/{application_id}/history")
+def history(
+    application_id: int, request: Request, response: Response, applicant: Applicant
+) -> InterviewHistory:
+    """본인 면접의 전체 답변과 평가를 조회합니다."""
+    response.headers["Cache-Control"] = "private, no-store"
+    return jobs_service.history(
+        request.app.state.workplace_engine, applicant, application_id
     )

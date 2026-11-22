@@ -31,3 +31,83 @@
 .roles button[aria-pressed='true'] {
   @apply outline-2 outline-offset-2 outline-green-600;
 }
+
+.review {
+  @apply my-3 rounded-lg border border-green-100 p-3;
+}
+
+.right {
+  @apply bg-green-100 text-green-900;
+}
+
+.wrong {
+  @apply bg-red-100 text-red-900;
+}
+
+.answerLines {
+  @apply grid gap-3 rounded-lg border border-neutral-200 bg-white p-3;
+}
+
+.answerLines p {
+  @apply m-0 min-h-5;
+}
+
+.inlineTips {
+  @apply mt-1 mb-0 grid list-none gap-1 p-0 text-xs;
+}
+
+.inlineTips li {
+  @apply flex flex-wrap items-baseline gap-x-2 rounded-md border px-2 py-1 leading-relaxed;
+}
+
+.inlineTips li[data-kind='right'] {
+  @apply border-green-200 bg-green-50 text-green-900;
+}
+
+.inlineTips li[data-kind='wrong'] {
+  @apply border-red-200 bg-red-50 text-red-900;
+}
+
+.interviewer {
+  @apply mt-5 flex items-start gap-3;
+}
+
+.interviewerBody {
+  @apply min-w-0 flex-1;
+}
+
+.interviewerBody header {
+  @apply mb-2 grid gap-0.5;
+}
+
+.interviewerBody small {
+  @apply text-neutral-600;
+}
+
+.feedbackBubble {
+  @apply relative rounded-xl border border-green-200 bg-green-50 p-4;
+}
+
+.feedbackBubble::before {
+  @apply absolute size-2 rotate-45 border-b border-l border-green-200 bg-green-50;
+  content: '';
+  left: -5px;
+  top: 14px;
+}
+
+.feedbackBubble h4 {
+  @apply mt-3 mb-1;
+}
+
+.feedbackBubble h4:first-child {
+  @apply mt-0;
+}
+
+.feedbackBubble p {
+  @apply my-1;
+  overflow-wrap: anywhere;
+}
+
+.feedbackBubble ul {
+  @apply my-2 pl-5 text-sm;
+}

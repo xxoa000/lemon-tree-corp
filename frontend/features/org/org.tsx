@@ -1,7 +1,8 @@
+import type { ReactNode } from 'react';
 import type { Employee, Team } from './org-api';
 import styles from './org.module.css';
 
-function Avatar({ employee }: { employee: Employee }) {
+export function Avatar({ employee }: { employee: Employee }) {
   const index =
     employee.id === 'LT-SYS-001' ? 11 : Number(employee.id.slice(3)) - 1;
   if (!Number.isInteger(index) || index < 0 || index > 11) {
@@ -98,19 +99,45 @@ export function Org({
 }
 
 const contactFields = ['이메일', '연락처', '주소', '홈페이지'];
-const resumeSections = [
-  ['학력사항', '등록된 학력이 없습니다.'],
-  ['경력사항', '등록된 프로젝트 경력이 없습니다.'],
-  ['자격증', '등록된 자격증이 없습니다.'],
-  ['수상', '등록된 수상 이력이 없습니다.'],
+export const resumeSections = [
+  ['education', '학력사항', '등록된 학력이 없습니다.'],
+  ['experience', '경력사항', '등록된 프로젝트 경력이 없습니다.'],
+  ['certificates', '자격증', '등록된 자격증이 없습니다.'],
+  ['awards', '수상', '등록된 수상 이력이 없습니다.'],
 ] as const;
 
 export function Profile({ profile }: { profile: Employee }) {
-  const skills = profile.specialty
-    .split('·')
-    .map((skill) => skill.trim())
-    .filter(Boolean);
+  return (
+    <ResumeSheet
+      name={profile.name}
+      headingId="dialog-heading"
+      role={`${profile.team} · ${profile.rank} · ${profile.job_title}`}
+      portrait={<Avatar employee={profile} />}
+      skills={profile.specialty
+        .split('·')
+        .map((skill) => skill.trim())
+        .filter(Boolean)}
+    />
+  );
+}
 
+export function ResumeSheet({
+  name,
+  role,
+  portrait,
+  contact = [],
+  sections,
+  skills,
+  headingId,
+}: {
+  name: string;
+  role?: string;
+  portrait?: ReactNode;
+  contact?: string[];
+  sections?: Partial<Record<(typeof resumeSections)[number][0], string>>;
+  skills: string[];
+  headingId?: string;
+}) {
   return (
     <article className={styles.resume}>
       <p className={styles.resumeTitle} lang="en">
@@ -118,30 +145,42 @@ export function Profile({ profile }: { profile: Employee }) {
       </p>
       <header className={styles.resumeHeader}>
         <div className={styles.resumePortrait}>
-          <Avatar employee={profile} />
+          {portrait ?? (
+            <span className={styles.initials} aria-hidden="true">
+              {name.slice(-2)}
+            </span>
+          )}
         </div>
         <div className={styles.resumeIdentity}>
-          <h2 id="dialog-heading">{profile.name}</h2>
-          <p className={styles.resumeRole}>
-            {profile.team} · {profile.rank} · {profile.job_title}
-          </p>
+          <h2 id={headingId}>{name}</h2>
+          {role && <p className={styles.resumeRole}>{role}</p>}
           <dl className={styles.resumeContacts}>
-            {contactFields.map((field) => (
+            {contactFields.map((field, index) => (
               <div key={field}>
                 <dt>{field}</dt>
                 <dd>
-                  <span aria-hidden="true">—</span>
-                  <span className="sr-only">등록된 정보 없음</span>
+                  {contact[index] || (
+                    <>
+                      <span aria-hidden="true">—</span>
+                      <span className="sr-only">등록된 정보 없음</span>
+                    </>
+                  )}
                 </dd>
               </div>
             ))}
           </dl>
         </div>
       </header>
-      {resumeSections.map(([heading, message]) => (
+      {resumeSections.map(([key, heading, message]) => (
         <section className={styles.resumeSection} key={heading}>
           <h3>{heading}</h3>
-          <p className={styles.resumeEmpty}>{message}</p>
+          <p
+            className={
+              sections?.[key] ? styles.resumeValue : styles.resumeEmpty
+            }
+          >
+            {sections?.[key] || message}
+          </p>
         </section>
       ))}
       <section className={styles.resumeSection}>
