@@ -2,10 +2,9 @@
 
 import fakeredis
 import pytest
-from fastapi.testclient import TestClient
-
 from app.main import app
 from app.modules.talk import talk_store
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -154,10 +153,9 @@ def test_redis_retains_recent_messages_and_unread(clients, monkeypatch):
 
 def test_staff_mock_reply_and_persistent_budget(clients, monkeypatch):
     """직원 모의 응답과 관리자 예산 한도, 외부 호출 비활성화를 확인합니다."""
-    from sqlalchemy import text
-
     from app.database import create_workplace_engine
     from app.modules.auth.auth_seed import provision
+    from sqlalchemy import text
 
     monkeypatch.setenv("WORKPLACE_LLM_MODE", "mock")
     alice, bobby, _ = clients
@@ -280,3 +278,107 @@ def test_code_practice_saves_only_to_owner(clients):
         ).status_code
         == 422
     )
+
+
+def test_staff_ollama_reply_preserves_user_message_if_model_is_down(
+    clients, monkeypatch
+):
+    """실제 Ollama 요청 형식, 답장 표시, 실패 시 메시지 보존과 예약 반환을 검증합니다."""
+    import json
+
+    import httpx
+    from app.database import create_workplace_engine
+    from app.modules.llm import llm_ollama
+    from sqlalchemy import text
+
+    monkeypatch.setenv("WORKPLACE_LLM_MODE", "ollama")
+    monkeypatch.setenv("INTERVIEW_OLLAMA_URL", "http://127.0.0.1:11434")
+    monkeypatch.setenv("INTERVIEW_OLLAMA_MODEL", "qwen2.5:7b")
+    seen = []
+
+    def respond(request):
+        assert str(request.url) == "http://127.0.0.1:11434/api/chat"
+        body = json.loads(request.content)
+        assert body["model"] == "qwen2.5:7b"
+        seen.append(json.loads(body["messages"][1]["content"]))
+        if len(seen) == 2:
+            return httpx.Response(503)
+        return httpx.Response(
+            200,
+            json={
+                "done": True,
+                "message": {"content": '{"text":"로컬 Ollama입니다."}'},
+            },
+        )
+
+    client_type = httpx.Client
+    monkeypatch.setattr(
+        llm_ollama.httpx,
+        "Client",
+        lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    alice, _, _ = clients
+    staff = next(
+        row["id"]
+        for row in alice.get("/api/v1/talk/contacts").json()
+        if row["employee_id"] == "LT-SYS-001"
+    )
+    dm = alice.post("/api/v1/talk/dm", json={"contact": staff}).json()["id"]
+    uri = f"/api/v1/talk/rooms/{dm}"
+
+    assert (
+        alice.post(uri + "/messages", json={"body": "누구세요?"}).json()["mock"]
+        == "ai_sent"
+    )
+    assert "백서윤 부장" in seen[0]["employee"]
+    assert seen[0]["recent_messages"] == []
+    result = alice.post(uri + "/messages", json={"body": "설명해 주세요."})
+    assert result.status_code == 201
+    assert result.json()["mock"] == "ai_unavailable"
+    assert seen[1]["recent_messages"] == [
+        {"speaker": "user", "text": "누구세요?"},
+        {"speaker": "employee", "text": "로컬 Ollama입니다."},
+    ]
+    messages = alice.get(uri).json()["messages"]
+    assert [row["body"] for row in messages] == [
+        "누구세요?",
+        "로컬 Ollama입니다.",
+        "설명해 주세요.",
+    ]
+    assert messages[1]["ai"] is True and messages[1]["simulated"] is False
+    assert messages[2]["ai"] is False
+    engine = create_workplace_engine()
+    try:
+        with engine.connect() as db:
+            assert list(
+                db.scalars(text("SELECT state FROM llm_usage ORDER BY id"))
+            ) == [
+                "settled",
+                "released",
+            ]
+    finally:
+        engine.dispose()
+
+
+def test_contacts_avatar_requires_login(clients):
+    """업로드한 프로필 사진은 로그인한 연락처에서 볼 수 있습니다."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    alice, bobby, carol = clients
+    picture = BytesIO()
+    Image.new("RGB", (8, 8), "green").save(picture, "PNG")
+    response = bobby.put(
+        "/api/v1/accounts/me/avatar",
+        files={"image": ("profile.png", picture.getvalue(), "image/png")},
+    )
+    assert response.status_code == 204
+    contacts = alice.get("/api/v1/talk/contacts").json()
+    url = next(row["avatar_url"] for row in contacts if row["name"] == "bobby")
+    response = alice.get(url)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/webp"
+    assert response.headers["cache-control"] == "private, no-store"
+    carol.delete("/api/v1/session")
+    assert carol.get(url).status_code == 401

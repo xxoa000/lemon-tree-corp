@@ -1,6 +1,11 @@
 import { json, request } from '../../shared/api';
 
-export type Contact = { id: number; name: string; employee_id: string | null };
+export type Contact = {
+  id: number;
+  name: string;
+  employee_id: string | null;
+  avatar_url?: string | null;
+};
 export type Room = {
   id: number;
   name: string;
@@ -18,6 +23,7 @@ export type Message = {
   body: string;
   sent_at: string;
   simulated: boolean;
+  ai?: boolean;
 };
 export type Conversation = {
   me: number;

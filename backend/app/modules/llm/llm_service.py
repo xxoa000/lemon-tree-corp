@@ -1,4 +1,4 @@
-"""외부 호출 없이 직원 모의 응답과 월 예산 예약·정산을 처리합니다."""
+"""직원 모의 응답과 월 예산 예약·정산을 처리합니다."""
 
 import os
 from datetime import datetime
@@ -80,7 +80,7 @@ def settle(engine: Engine, usage_id: int, sent: bool) -> None:
 
 def prepare(engine: Engine, employee: str, message: str) -> tuple[str, str, int | None]:
     """모의 답장과 가상 비용 예약을 준비합니다."""
-    if os.getenv("WORKPLACE_LLM_MODE", "mock") != "mock":
+    if os.getenv("WORKPLACE_LLM_MODE", "ollama") != "mock":
         return "disabled", "", None
     reply = mock_reply(employee, message)
     charge = max(1, (len(message) + len(reply) + 49) // 50)

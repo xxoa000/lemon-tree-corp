@@ -1,5 +1,7 @@
 """대화방 접근 권한, 전송, 읽음과 멤버 변경을 처리합니다."""
 
+import os
+
 from fastapi import HTTPException
 from redis.exceptions import RedisError
 from sqlalchemy import Engine, select
@@ -9,8 +11,9 @@ from sqlalchemy.orm import Session
 from app.database import lock_sqlite_write
 from app.modules.auth.auth_model import Account
 from app.modules.llm import llm_service
+from app.modules.llm.llm_ollama import OllamaBusy
 
-from . import talk_store
+from . import talk_ai, talk_store
 from .talk_model import Member, Room
 
 
@@ -27,13 +30,27 @@ def contacts(engine: Engine, owner: int) -> list[dict]:
     """본인을 제외한 직원과 사용자 연락처를 조회합니다."""
     with Session(engine) as db:
         return [
-            contact_view(row)
-            for row in db.scalars(
-                select(Account)
+            {
+                **contact_view(row),
+                "avatar_url": f"/api/v1/talk/contacts/{row.id}/avatar"
+                if has_avatar
+                else None,
+            }
+            for row, has_avatar in db.execute(
+                select(Account, Account.avatar.is_not(None))
                 .where(Account.id != owner)
                 .order_by(Account.display_name, Account.id)
             )
         ]
+
+
+def avatar(engine: Engine, contact: int) -> bytes:
+    """LemonTalk 연락처에서 공개하는 프로필 사진을 반환합니다."""
+    with Session(engine) as db:
+        image = db.scalar(select(Account.avatar).where(Account.id == contact))
+        if not image:
+            raise HTTPException(404, "연락처 사진이 없습니다.")
+        return image
 
 
 def room_snapshot(engine: Engine, owner: int) -> list[dict]:
@@ -187,10 +204,11 @@ def detail(engine: Engine, room_id: int, owner: int, before: int | None) -> dict
 
 
 def send(engine: Engine, room_id: int, owner: int, body: str) -> dict:
-    """Redis에 메시지를 전송하고 직원 DM에서는 가상 예산으로 모의 답장을 보냅니다."""
+    """Redis에 메시지를 전송하고 직원 DM에서는 설정에 맞춘 자동 답장을 보냅니다."""
     with Session(engine) as db, db.begin():
         room = lock_room(db, room_id)
-        membership(db, room_id, owner)
+        member = membership(db, room_id, owner)
+        joined_after = member.joined_after
         people = list(
             db.scalars(select(Account).join(Member).where(Member.room_id == room_id))
         )
@@ -212,6 +230,11 @@ def send(engine: Engine, room_id: int, owner: int, body: str) -> dict:
         return result
 
     staff_id, employee_id, staff_name = staff
+    if os.getenv("WORKPLACE_LLM_MODE", "ollama") == "ollama":
+        result["mock"] = send_ai_reply(
+            engine, room_id, owner, body, message_id, joined_after, staff, recipients
+        )
+        return result
     status, reply, reservation = llm_service.prepare(engine, employee_id, body)
     result["mock"] = status
     if reservation is not None:
@@ -227,6 +250,44 @@ def send(engine: Engine, room_id: int, owner: int, body: str) -> dict:
         finally:
             llm_service.settle(engine, reservation, delivered)
     return result
+
+
+def send_ai_reply(
+    engine: Engine,
+    room_id: int,
+    owner: int,
+    body: str,
+    message_id: int,
+    joined_after: int,
+    staff: tuple[int, str, str],
+    recipients: list[int],
+) -> str:
+    """가상 예산을 예약하고 현재 방에 AI 답장을 저장한 뒤 정산합니다."""
+    staff_id, employee_id, staff_name = staff
+    try:
+        recent = talk_store.page(room_id, joined_after, message_id, limit=6)
+    except RedisError:
+        return "ai_unavailable"
+    charge = max(
+        1,
+        (len(body) + 420 + sum(min(len(row["body"]), 360) for row in recent) + 49)
+        // 50,
+    )
+    reservation = llm_service.reserve(engine, employee_id, charge)
+    if reservation is None:
+        return "budget_exhausted"
+    delivered = False
+    try:
+        reply = talk_ai.reply(employee_id, owner, body, recent)
+        talk_store.add(room_id, staff_id, staff_name, reply, recipients, ai=True)
+        delivered = True
+        return "ai_sent"
+    except OllamaBusy:
+        return "ai_busy"
+    except (HTTPException, RedisError):
+        return "ai_unavailable"
+    finally:
+        llm_service.settle(engine, reservation, delivered)
 
 
 def read(engine: Engine, room_id: int, owner: int, message_id: int) -> None:

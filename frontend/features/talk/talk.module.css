@@ -22,6 +22,14 @@
   @apply rounded-full bg-red-700 px-2 text-white;
 }
 
+.contact {
+  @apply items-center justify-start;
+}
+
+.contactPhoto {
+  @apply size-[34px] flex-none rounded-full object-cover;
+}
+
 .conversation {
   @apply min-w-0 rounded-xl border border-green-100 p-3;
 }
@@ -48,7 +56,23 @@
   @apply flex min-w-0 gap-2;
 }
 
-.send input,
+.send textarea,
 .invite select {
   @apply min-w-0 flex-1 rounded-md border border-green-200 p-2;
+}
+
+.send {
+  @apply items-end;
+}
+
+.send textarea {
+  @apply max-h-40 resize-none overflow-y-auto leading-relaxed;
+  box-sizing: border-box;
+  field-sizing: content;
+  min-height: 2.75rem;
+  overflow-wrap: anywhere;
+}
+
+.send button {
+  @apply shrink-0;
 }

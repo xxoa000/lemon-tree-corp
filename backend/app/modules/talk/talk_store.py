@@ -20,7 +20,7 @@ local seq = math.max(now, tonumber(redis.call('GET', KEYS[3]) or '0') + 1)
 local id = string.format('%.0f', seq) .. '-0'
 redis.call('SET', KEYS[3], string.format('%.0f', seq))
 redis.call('XADD', KEYS[1], id, 'sender', ARGV[2], 'name', ARGV[3],
-    'body', ARGV[4], 'sent_at', ARGV[5], 'simulated', ARGV[6])
+    'body', ARGV[4], 'sent_at', ARGV[5], 'simulated', ARGV[6], 'ai', ARGV[10])
 redis.call('EXPIRE', KEYS[1], tonumber(ARGV[7]))
 redis.call('EXPIRE', KEYS[4], tonumber(ARGV[7]))
 redis.call('ZADD', KEYS[2], seq, KEYS[1] .. '|' .. id)
@@ -39,7 +39,7 @@ if overflow > 0 then
         redis.call('XDEL', stream, entry)
     end
 end
-for i = 10, #ARGV do
+for i = 11, #ARGV do
     redis.call('PUBLISH', ARGV[i], 'changed')
 end
 return id
@@ -97,6 +97,8 @@ def add(
     body: str,
     members: list[int],
     simulated: bool = False,
+    *,
+    ai: bool = False,
 ) -> int:
     """메시지를 쓰고 방별·전역 오래된 기록을 원자적으로 정리합니다."""
     raw = cast(
@@ -117,6 +119,7 @@ def add(
             str(ttl()),
             str(max(1, int(os.getenv("TALK_ROOM_LIMIT", "1000")))),
             str(max(1, int(os.getenv("TALK_TOTAL_LIMIT", "3000")))),
+            str(int(ai)),
             *(channel(account) for account in members),
         ),
     )
@@ -135,15 +138,15 @@ def latest(room: int) -> int:
     return int(rows[0][0].split("-")[0]) if rows else 0
 
 
-def page(room: int, after: int, before: int | None) -> list[dict]:
-    """접근 가능한 최근 51개 메시지를 최신순으로 조회합니다."""
+def page(room: int, after: int, before: int | None, *, limit: int = 51) -> list[dict]:
+    """접근 가능한 최근 메시지를 최신순으로 조회합니다."""
     rows = cast(
         StreamRows,
         client().xrevrange(
             key(room),
             max=f"({before}-0" if before else "+",
             min=f"({after}-0",
-            count=51,
+            count=limit,
         ),
     )
     return [
@@ -154,6 +157,7 @@ def page(room: int, after: int, before: int | None) -> list[dict]:
             "body": fields["body"],
             "sent_at": fields["sent_at"],
             "simulated": fields["simulated"] == "1",
+            "ai": fields.get("ai") == "1",
         }
         for raw, fields in rows
     ]

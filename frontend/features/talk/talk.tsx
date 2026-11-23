@@ -1,4 +1,6 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
+
+import { Avatar } from '../org/org';
 
 import * as api from './talk-api';
 import styles from './talk.module.css';
@@ -36,6 +38,30 @@ export function useTalk(account?: string) {
   };
 }
 
+function ContactAvatar({ contact }: { contact: api.Contact }) {
+  const [failedUrl, setFailedUrl] = useState<string>();
+  if (contact.avatar_url && contact.avatar_url !== failedUrl) {
+    const url = contact.avatar_url;
+    return (
+      <img
+        className={styles.contactPhoto}
+        src={url}
+        alt=""
+        onError={() => setFailedUrl(url)}
+      />
+    );
+  }
+  return (
+    <Avatar employee={{ id: contact.employee_id ?? '', name: contact.name }} />
+  );
+}
+
+function resizeMessage(field: HTMLTextAreaElement) {
+  if (CSS.supports('field-sizing', 'content')) return;
+  field.style.height = 'auto';
+  field.style.height = `${field.scrollHeight + field.offsetHeight - field.clientHeight}px`;
+}
+
 export function Talk({
   rooms,
   live,
@@ -52,6 +78,8 @@ export function Talk({
     data: api.Conversation;
   }>();
   const [pending, setPending] = useState(false);
+  const [sending, setSending] = useState(false);
+  const messageField = useRef<HTMLTextAreaElement>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -155,22 +183,30 @@ export function Talk({
 
   function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!room) return;
-    const form = event.currentTarget;
+    const field = messageField.current;
+    if (!room || pending || !field || !field.value.trim()) return;
+    setNotice('');
     void run(async () => {
-      const result = await api.sendMessage(
-        room.id,
-        String(new FormData(form).get('body') ?? ''),
-      );
-      form.reset();
-      const notices: Record<string, string> = {
-        budget_exhausted:
-          '메시지는 전송됐습니다. 이 직원의 모의 답장에 필요한 남은 예산이 부족합니다.',
-        disabled: '메시지는 전송됐습니다. 모의 답장은 꺼져 있습니다.',
-        unavailable: '메시지는 전송됐습니다. 모의 답장을 저장하지 못했습니다.',
-      };
-      setNotice(notices[result.mock] ?? '');
-      await refresh();
+      setSending(true);
+      try {
+        const result = await api.sendMessage(room.id, field.value);
+        field.value = '';
+        resizeMessage(field);
+        const notices: Record<string, string> = {
+          ai_unavailable:
+            '메시지는 전송됐습니다. Ollama 답장을 받지 못했습니다. 로컬 Ollama의 실행 상태를 확인해 주세요.',
+          ai_busy: '메시지는 전송됐습니다. Ollama가 다른 답장을 처리 중입니다.',
+          budget_exhausted:
+            '메시지는 전송됐습니다. 이 직원의 답장에 필요한 남은 예산이 부족합니다.',
+          disabled: '메시지는 전송됐습니다. 자동 답장은 꺼져 있습니다.',
+          unavailable:
+            '메시지는 전송됐습니다. 모의 답장을 저장하지 못했습니다.',
+        };
+        setNotice(notices[result.mock] ?? '');
+        await refresh();
+      } finally {
+        setSending(false);
+      }
     });
   }
 
@@ -198,6 +234,7 @@ export function Talk({
               key={item.id}
               className={styles.room}
               aria-pressed={item.id === roomId}
+              disabled={pending}
               onClick={() => choose(item.id)}
             >
               {item.name}
@@ -209,7 +246,7 @@ export function Talk({
             {contacts.map((contact) => (
               <button
                 key={contact.id}
-                className={styles.room}
+                className={`${styles.room} ${styles.contact}`}
                 disabled={pending}
                 onClick={() =>
                   void run(async () => {
@@ -219,7 +256,8 @@ export function Talk({
                   })
                 }
               >
-                {contact.name}
+                <ContactAvatar contact={contact} />
+                <span>{contact.name}</span>
               </button>
             ))}
           </details>
@@ -348,7 +386,12 @@ export function Talk({
                 <li key={message.id} data-mine={message.sender === current.me}>
                   <small>
                     {message.name}
-                    {message.simulated ? ' · 모의 응답' : ''} ·{' '}
+                    {message.ai
+                      ? ' · Ollama AI'
+                      : message.simulated
+                        ? ' · 모의 응답'
+                        : ''}
+                    {' · '}
                     {new Date(message.sent_at).toLocaleTimeString('ko-KR', {
                       hour: '2-digit',
                       minute: '2-digit',
@@ -358,15 +401,19 @@ export function Talk({
                 </li>
               ))}
             </ol>
-            <form className={styles.send} onSubmit={send}>
-              <input
+            <form key={room.id} className={styles.send} onSubmit={send}>
+              <textarea
+                ref={messageField}
                 name="body"
                 aria-label="메시지"
+                rows={1}
                 required
                 maxLength={3000}
+                readOnly={sending}
+                onInput={(event) => resizeMessage(event.currentTarget)}
               />
               <button className="action" disabled={pending}>
-                보내기
+                {sending ? '보내는 중…' : '보내기'}
               </button>
             </form>
           </section>

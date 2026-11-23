@@ -38,6 +38,19 @@ def contacts(request: Request, owner: Owner) -> list[dict]:
     return talk_service.contacts(request.app.state.workplace_engine, owner)
 
 
+@router.get("/contacts/{contact_id}/avatar")
+def avatar(contact_id: int, request: Request, owner: Owner) -> Response:
+    """인증된 연락망에서 프로필 사진을 제공합니다."""
+    return Response(
+        talk_service.avatar(request.app.state.workplace_engine, contact_id),
+        media_type="image/webp",
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @router.get("/rooms")
 def rooms(request: Request, owner: Owner) -> list[dict]:
     """참여 중인 방과 읽지 않은 수를 반환합니다."""

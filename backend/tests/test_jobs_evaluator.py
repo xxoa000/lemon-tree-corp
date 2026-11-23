@@ -6,6 +6,7 @@ import os
 import httpx
 import pytest
 from app.modules.jobs import jobs_evaluator
+from app.modules.llm import llm_ollama
 from fastapi import HTTPException
 
 CRITERIA = ("없는 항목 처리", "잘못된 입력 처리", "검증 계획")
@@ -57,7 +58,7 @@ def transport(monkeypatch, evidence):
         )
 
     monkeypatch.setattr(
-        jobs_evaluator.httpx,
+        llm_ollama.httpx,
         "Client",
         lambda **kwargs: real_client(
             transport=httpx.MockTransport(reply),
@@ -106,7 +107,7 @@ def test_remote_configuration_is_rejected(monkeypatch, url, model):
     monkeypatch.setenv("INTERVIEW_OLLAMA_URL", url)
     monkeypatch.setenv("INTERVIEW_OLLAMA_MODEL", model)
     with pytest.raises(HTTPException) as error:
-        jobs_evaluator.local_settings()
+        llm_ollama.local_settings()
     assert error.value.status_code == 503
 
 

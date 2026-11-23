@@ -2,7 +2,11 @@ import type { ReactNode } from 'react';
 import type { Employee, Team } from './org-api';
 import styles from './org.module.css';
 
-export function Avatar({ employee }: { employee: Employee }) {
+export function Avatar({
+  employee,
+}: {
+  employee: Pick<Employee, 'id' | 'name'>;
+}) {
   const index =
     employee.id === 'LT-SYS-001' ? 11 : Number(employee.id.slice(3)) - 1;
   if (!Number.isInteger(index) || index < 0 || index > 11) {
