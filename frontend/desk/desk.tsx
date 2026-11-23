@@ -23,6 +23,7 @@ import { Talk, useTalk } from '../features/talk/talk';
 import { Vlog } from '../features/vlog/vlog';
 import { Plan } from '../features/plan/plan';
 import { Board } from '../features/task/task';
+import { CodexWork } from '../features/work/work';
 import {
   getTasks,
   updateTask,
@@ -260,6 +261,9 @@ export default function Workspace() {
               onStatus={changeStatus}
               onSelect={setProfile}
             />
+          )}
+          {section === '업무' && session?.role === 'admin' && (
+            <CodexWork key={session.employee_id} />
           )}
           {section === '코딩 테스트' && (
             <CodePractice

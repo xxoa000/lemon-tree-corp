@@ -54,19 +54,23 @@ def reserve(engine: Engine, employee: str, charge: int) -> int | None:
     """동시 요청에서도 월 한도를 넘기지 않게 예상 비용을 예약합니다."""
     with Session(engine) as db, db.begin():
         lock_sqlite_write(db)
-        budget = db.get(Budget, employee, with_for_update=True)
-        month = month_key()
-        if (
-            budget is None
-            or used_amount(db, employee, month) + charge > budget.monthly_limit
-        ):
-            return None
-        usage = Usage(
-            employee_id=employee, month=month, charged=charge, state="reserved"
-        )
-        db.add(usage)
-        db.flush()
-        return usage.id
+        usage = reserve_usage(db, employee, charge)
+        return usage.id if usage else None
+
+
+def reserve_usage(db: Session, employee: str, charge: int) -> Usage | None:
+    """호출자의 트랜잭션 안에서 직원 예산을 확인하고 예약합니다."""
+    budget = db.get(Budget, employee, with_for_update=True)
+    month = month_key()
+    if (
+        budget is None
+        or used_amount(db, employee, month) + charge > budget.monthly_limit
+    ):
+        return None
+    usage = Usage(employee_id=employee, month=month, charged=charge, state="reserved")
+    db.add(usage)
+    db.flush()
+    return usage
 
 
 def settle(engine: Engine, usage_id: int, sent: bool) -> None:

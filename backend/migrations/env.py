@@ -14,6 +14,7 @@ from app.modules.llm import llm_model  # noqa: F401
 from app.modules.talk import talk_model  # noqa: F401
 from app.modules.task import task_model  # noqa: F401
 from app.modules.vlog import vlog_model  # noqa: F401
+from app.modules.work import work_model  # noqa: F401
 
 
 def compare_defaults(

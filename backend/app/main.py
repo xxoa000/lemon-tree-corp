@@ -17,6 +17,7 @@ from app.modules.org.org_router import router as org_router
 from app.modules.talk.talk_router import router as talk_router
 from app.modules.task.task_router import router as task_router
 from app.modules.vlog.vlog_router import router as vlog_router
+from app.modules.work.work_router import router as work_router
 
 
 @asynccontextmanager
@@ -41,6 +42,7 @@ app.include_router(code_router)
 app.include_router(jobs_router)
 app.include_router(llm_router)
 app.include_router(task_router)
+app.include_router(work_router)
 
 
 @app.get("/health")
