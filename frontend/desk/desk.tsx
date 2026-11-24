@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { type FormEvent, useEffect, useState } from 'react';
 import { Login } from '../features/auth/auth';
 import {
@@ -9,7 +10,6 @@ import {
   type Session,
 } from '../features/auth/auth-api';
 import { CodePractice } from '../features/code/code';
-import { MyPage } from '../features/mypg/mypg';
 import { Jobs } from '../features/jobs/jobs';
 import { Org, Profile } from '../features/org/org';
 import {
@@ -46,7 +46,6 @@ export default function Workspace() {
   const [talkOpen, setTalkOpen] = useState(false);
   const talk = useTalk(session?.employee_id);
   const unread = talk.rooms.reduce((sum, room) => sum + room.unread, 0);
-  const [myPageOpen, setMyPageOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [startOpen, setStartOpen] = useState(false);
   const [mine, setMine] = useState(false);
@@ -90,7 +89,6 @@ export default function Workspace() {
     setMine(onlyMine);
     setProfile(null);
     setLoginOpen(false);
-    setMyPageOpen(false);
     setTalkOpen(false);
     setStartOpen(false);
     setError('');
@@ -99,7 +97,6 @@ export default function Workspace() {
   function openTalk() {
     setStartOpen(false);
     setProfile(null);
-    setMyPageOpen(false);
     setError('');
     if (session?.employee_id.startsWith('acct:')) setTalkOpen(true);
     else setLoginOpen(true);
@@ -125,7 +122,6 @@ export default function Workspace() {
     try {
       await deleteSession();
       setSession(null);
-      setMyPageOpen(false);
       setTalkOpen(false);
       setMine(false);
       setProfile(null);
@@ -195,22 +191,7 @@ export default function Workspace() {
             </button>
             {session ? (
               <>
-                {session.employee_id.startsWith('acct:') ? (
-                  <button onClick={() => setMyPageOpen(true)}>
-                    마이페이지
-                  </button>
-                ) : (
-                  people.has(session.employee_id) && (
-                    <button
-                      onClick={() => {
-                        const person = people.get(session.employee_id);
-                        if (person) setProfile(person);
-                      }}
-                    >
-                      마이페이지
-                    </button>
-                  )
-                )}
+                <Link href="/mypg">마이페이지</Link>
                 <button onClick={logout}>로그아웃</button>
               </>
             ) : (
@@ -315,7 +296,7 @@ export default function Workspace() {
           })}
         </time>
       </footer>
-      {(profile || loginOpen || myPageOpen || talkOpen) && (
+      {(profile || loginOpen || talkOpen) && (
         <dialog
           className={
             talkOpen ? 'talk-dialog' : profile ? 'resume-dialog' : undefined
@@ -325,7 +306,6 @@ export default function Workspace() {
           }}
           onClose={() => {
             setTalkOpen(false);
-            setMyPageOpen(false);
             setProfile(null);
             setLoginOpen(false);
           }}
@@ -338,8 +318,6 @@ export default function Workspace() {
             <Login login={login} error={error} busy={busy} />
           ) : talkOpen ? (
             <Talk {...talk} />
-          ) : myPageOpen ? (
-            <MyPage people={people} />
           ) : (
             profile && <Profile profile={profile} />
           )}

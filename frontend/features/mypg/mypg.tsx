@@ -13,9 +13,15 @@ import { InterviewRecords } from '../jobs/jobs-review';
 import { ResumeManager } from '../cv/cv';
 import styles from './mypg.module.css';
 
-export function MyPage({ people }: { people: ReadonlyMap<string, Employee> }) {
+export function MyPage({
+  people,
+  hasAccount,
+}: {
+  people: ReadonlyMap<string, Employee>;
+  hasAccount: boolean;
+}) {
   const [tab, setTab] = useState<'profile' | 'resume' | 'interviews'>(
-    'profile',
+    hasAccount ? 'profile' : 'interviews',
   );
   const [profile, setProfile] = useState<Profile>();
   const [avatarVersion, setAvatarVersion] = useState(0);
@@ -29,6 +35,7 @@ export function MyPage({ people }: { people: ReadonlyMap<string, Employee> }) {
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
+    if (!hasAccount) return;
     let active = true;
     getProfile()
       .then((data) => {
@@ -40,7 +47,7 @@ export function MyPage({ people }: { people: ReadonlyMap<string, Employee> }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [hasAccount]);
 
   useEffect(() => {
     if (!toast) return;
@@ -85,9 +92,6 @@ export function MyPage({ people }: { people: ReadonlyMap<string, Employee> }) {
 
   return (
     <>
-      <h2 id="dialog-heading" data-wide={tab !== 'profile'}>
-        마이페이지
-      </h2>
       <div className={styles.toastArea} aria-live="polite" aria-atomic="true">
         {toast && (
           <p className={styles.toast} data-type={toast.type}>
@@ -95,29 +99,31 @@ export function MyPage({ people }: { people: ReadonlyMap<string, Employee> }) {
           </p>
         )}
       </div>
-      <nav aria-label="마이페이지 메뉴" className={styles.tabs}>
-        <button
-          className="action"
-          aria-pressed={tab === 'profile'}
-          onClick={() => setTab('profile')}
-        >
-          회원정보
-        </button>
-        <button
-          className="action"
-          aria-pressed={tab === 'resume'}
-          onClick={() => setTab('resume')}
-        >
-          이력서 관리
-        </button>
-        <button
-          className="action"
-          aria-pressed={tab === 'interviews'}
-          onClick={() => setTab('interviews')}
-        >
-          모의면접 기록
-        </button>
-      </nav>
+      {hasAccount && (
+        <nav aria-label="마이페이지 메뉴" className={styles.tabs}>
+          <button
+            className="action"
+            aria-pressed={tab === 'profile'}
+            onClick={() => setTab('profile')}
+          >
+            회원정보
+          </button>
+          <button
+            className="action"
+            aria-pressed={tab === 'resume'}
+            onClick={() => setTab('resume')}
+          >
+            이력서 관리
+          </button>
+          <button
+            className="action"
+            aria-pressed={tab === 'interviews'}
+            onClick={() => setTab('interviews')}
+          >
+            모의면접 기록
+          </button>
+        </nav>
+      )}
       {tab === 'resume' && profile && (
         <ResumeManager
           name={profile.display_name}

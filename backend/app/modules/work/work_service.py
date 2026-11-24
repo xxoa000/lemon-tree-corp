@@ -8,6 +8,7 @@ from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session, defer
 
 from app.database import lock_sqlite_write
+from app.modules.auth.auth_model import Account
 from app.modules.llm.llm_model import Budget, Usage
 from app.modules.llm.llm_service import month_key, reserve_usage, used_amount
 from app.modules.org.org_service import employees, manager
@@ -105,11 +106,23 @@ def execution_images(engine: Engine, job_id: int) -> list[bytes]:
         )
 
 
+def lock_admin(db: Session, actor: int) -> None:
+    """작업을 변경하는 트랜잭션에서 요청 계정의 현재 관리자 권한을 확인합니다."""
+    account = db.get(Account, actor, with_for_update=True)
+    if account is None or account.role != "admin":
+        raise HTTPException(403, "관리자 권한이 필요합니다.")
+
+
 def create(
-    engine: Engine, data: Draft, images: list[tuple[str, bytes]] | None = None
+    engine: Engine,
+    actor: int,
+    data: Draft,
+    images: list[tuple[str, bytes]] | None = None,
 ) -> WorkView:
     """선택한 직원의 요청을 승인 대기 상태로 저장합니다."""
     with Session(engine) as db, db.begin():
+        lock_sqlite_write(db)
+        lock_admin(db, actor)
         if db.get(Budget, data.employee_id) is None:
             raise HTTPException(422, "담당 직원을 확인해 주세요.")
         row = Work(
@@ -143,10 +156,11 @@ def job(db: Session, job_id: int, lock: bool = False) -> Work:
     return row
 
 
-def approve(engine: Engine, job_id: int) -> WorkView:
+def approve(engine: Engine, actor: int, job_id: int) -> WorkView:
     """중복 승인 없이 월 예산을 예약하고 실행 대기열에 등록합니다."""
     with Session(engine) as db, db.begin():
         lock_sqlite_write(db)
+        lock_admin(db, actor)
         row = job(db, job_id, lock=True)
         images = image_metadata(db, [job_id])[job_id]
         if row.state != "draft":

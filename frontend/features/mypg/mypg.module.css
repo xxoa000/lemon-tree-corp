@@ -43,3 +43,32 @@
 .toast[data-type='error'] {
   @apply border-red-700 text-red-900;
 }
+
+.screen {
+  @apply min-h-dvh;
+}
+
+.screenHeader {
+  @apply flex flex-wrap items-center justify-between gap-3 border-b border-green-100 bg-white px-4 py-3 sm:px-8;
+}
+
+.workspaceLink {
+  @apply font-semibold text-green-950;
+}
+
+.screenMain {
+  @apply mx-auto w-full min-w-0 max-w-5xl px-4 py-5 sm:px-8 sm:py-8;
+  overflow-wrap: anywhere;
+}
+
+.screenMain h1 {
+  @apply mt-0;
+}
+
+.signIn {
+  @apply max-w-md rounded-lg border border-green-100 bg-white p-4 sm:p-6;
+}
+
+.screenMain select {
+  @apply max-w-full;
+}

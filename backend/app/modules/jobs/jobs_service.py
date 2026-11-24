@@ -1,11 +1,13 @@
 """이력서 텍스트를 읽고 모의 선발의 질문과 단계를 관리합니다."""
 
 import json
+import logging
 import re
 from io import BytesIO
 from pathlib import PurePath
 
 from fastapi import HTTPException, UploadFile
+from pydantic import ValidationError
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError
 from sqlalchemy import Engine, select
@@ -25,6 +27,8 @@ from .jobs_schemas import (
     Posting,
     Question,
 )
+
+logger = logging.getLogger(__name__)
 
 MAX_SIZE = 2 * 1024 * 1024
 MAX_PAGES = 10
@@ -136,6 +140,18 @@ def unanswered(db: Session, row: Application):
     return next((item for item in questions_for(row) if item[0] not in answered), None)
 
 
+def saved_evaluation(row: InterviewAnswer) -> Evaluation | None:
+    """저장된 평가 한 건의 형식이 달라도 면접 기록과 답변을 열 수 있게 합니다."""
+    if row.evaluation:
+        try:
+            return Evaluation.model_validate_json(row.evaluation)
+        except ValidationError:
+            logger.warning(
+                "Could not read interview evaluation for answer ID %s", row.id
+            )
+    return None
+
+
 def application_view(db: Session, row: Application) -> ApplicationView:
     """현재 전형과 저장된 다음 질문, 최근 평가를 반환합니다."""
     slot = unanswered(db, row)
@@ -162,9 +178,7 @@ def application_view(db: Session, row: Application) -> ApplicationView:
         feedback=row.feedback,
         created_at=str(row.created_at),
         question=question,
-        latest_evaluation=Evaluation.model_validate_json(latest.evaluation)
-        if latest and latest.evaluation
-        else None,
+        latest_evaluation=saved_evaluation(latest) if latest else None,
         latest_answer=latest.answer if latest else None,
     )
 
@@ -288,7 +302,10 @@ def history(engine: Engine, applicant: str, application_id: int) -> InterviewHis
                 )
             )
         }
-        legacy = {key: prompt for key, _, prompt, _ in (*TECH_BY_ROLE[row.role], *CULT)}
+        legacy = {
+            key: prompt
+            for key, _, prompt, _ in (*TECH_BY_ROLE.get(row.role, ()), *CULT)
+        }
         answers = [
             InterviewEntry(
                 question_id=item.question_id,
@@ -297,9 +314,8 @@ def history(engine: Engine, applicant: str, application_id: int) -> InterviewHis
                 ),
                 answer=item.answer,
                 score=item.score,
-                evaluation=Evaluation.model_validate_json(item.evaluation)
-                if item.evaluation
-                else None,
+                evaluation=saved_evaluation(item),
+                original_question_saved=item.question_id in questions,
             )
             for item in db.scalars(
                 select(InterviewAnswer)

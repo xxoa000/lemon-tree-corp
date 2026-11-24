@@ -309,3 +309,38 @@ def test_unavailable_grading_leaves_current_question(tmp_path, monkeypatch):
         )
         assert response.status_code == 503
         assert client.get("/api/v1/jobs/applications").json()[0] == row
+
+
+def test_interview_history_survives_backend_restart(tmp_path, monkeypatch):
+    """재시작과 재로그인 후에도 이전 질문·답변·평가를 저장된 그대로 읽습니다."""
+    monkeypatch.setenv("WORKPLACE_DB_PATH", str(tmp_path / "persisted.sqlite3"))
+    monkeypatch.setenv("WORKPLACE_JWT_SECRET", "test-only-account-secret-32-characters")
+    url = "/api/v1/jobs/applications"
+    with TestClient(app) as client:
+        register(client, "candidate")
+        assert login(client, "candidate").status_code == 200
+        row = prepare(client, client.post(url).json())
+        answered = row["question"]
+        response = client.post(
+            f"{url}/{row['id']}/answers",
+            json={"question_id": answered["id"], "answer": ANSWERS[0]},
+        )
+        assert response.status_code == 200
+        pending = prepare(client, response.json())["question"]
+
+    def unexpected_model_call(*args, **kwargs):
+        """기록을 조회할 때 로컬 모델을 다시 호출하면 실패합니다."""
+        pytest.fail("history should use only persisted records")
+
+    monkeypatch.setattr(jobs_service, "evaluate", unexpected_model_call)
+    monkeypatch.setattr(jobs_service, "generate_question", unexpected_model_call)
+    with TestClient(app) as client:
+        assert login(client, "candidate").status_code == 200
+        assert client.get(url).json()[0]["id"] == row["id"]
+        history = client.get(f"{url}/{row['id']}/history").json()
+        assert history["application"]["question"] == pending
+        record = history["answers"][0]
+        assert record["original_question_saved"]
+        assert record["prompt"] == answered["prompt"]
+        assert record["answer"] == ANSWERS[0]
+        assert record["evaluation"]["feedback"] == "테스트 평가"

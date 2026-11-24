@@ -25,6 +25,7 @@ export type History = {
     answer: string;
     score: number;
     evaluation: Evaluation | null;
+    original_question_saved?: boolean;
   }[];
 };
 

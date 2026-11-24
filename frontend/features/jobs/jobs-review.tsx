@@ -216,49 +216,66 @@ export function InterviewRecords({
   const [postings, setPostings] = useState<Posting[]>([]);
   const [selected, setSelected] = useState<number>();
   const [detail, setDetail] = useState<History>();
-  const [error, setError] = useState('');
+  const [listError, setListError] = useState('');
+  const [detailError, setDetailError] = useState('');
+  const error = listError || detailError;
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let active = true;
-    Promise.all([getApplications(), getPostings()])
-      .then(([rows, roles]) => {
+    setListError('');
+    getPostings()
+      .then((roles) => {
+        if (active) setPostings(roles);
+      })
+      .catch(() => {});
+    getApplications()
+      .then((rows) => {
         if (active) {
           setApplications(rows);
-          setPostings(roles);
-          setSelected(rows[0]?.id);
+          setSelected((previous) =>
+            rows.some((row) => row.id === previous) ? previous : rows[0]?.id,
+          );
         }
       })
       .catch((cause) => {
-        if (active) setError(cause.message);
+        if (active) setListError(cause.message);
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [reload]);
 
   useEffect(() => {
     if (!selected) return;
     let active = true;
     setDetail(undefined);
-    setError('');
+    setDetailError('');
     interviewHistory(selected)
       .then((data) => {
         if (active) setDetail(data);
       })
       .catch((cause) => {
-        if (active) setError(cause.message);
+        if (active) setDetailError(cause.message);
       });
     return () => {
       active = false;
     };
-  }, [selected]);
+  }, [selected, reload]);
 
   return (
     <section aria-label="내 모의면접 기록">
       {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
+        <div role="alert">
+          <p className="error">{error}</p>
+          <button
+            type="button"
+            className="action"
+            onClick={() => setReload((value) => value + 1)}
+          >
+            기록 다시 불러오기
+          </button>
+        </div>
       )}
       {!applications && !error && (
         <p role="status">면접 기록을 불러오는 중입니다.</p>
@@ -276,22 +293,39 @@ export function InterviewRecords({
                 #{row.id} ·{' '}
                 {postings.find((role) => role.role === row.role)?.title ??
                   row.role}{' '}
-                · {stages[row.stage]}
+                · {stages[row.stage] ?? row.stage} ·{' '}
+                {row.created_at.slice(0, 10)}
               </option>
             ))}
           </select>
         </label>
       )}
-      {detail && (
+      {selected && !detail && !error && (
+        <p role="status">선택한 면접을 불러오는 중입니다.</p>
+      )}
+      {detail?.application.id === selected && detail && (
         <>
           <h3>{stages[detail.application.stage]}</h3>
           <p>{detail.application.feedback}</p>
+          {detail.application.question && (
+            <details>
+              <summary>저장된 미응답 질문</summary>
+              <p className={styles.prompt}>
+                {detail.application.question.prompt}
+              </p>
+            </details>
+          )}
           {detail.answers.length === 0 && <p>제출한 답변이 없습니다.</p>}
           {detail.answers.map((row) => (
             <details key={row.question_id}>
               <summary>
                 {row.prompt} · {row.score}/3점
               </summary>
+              {row.original_question_saved === false && (
+                <p className="muted">
+                  저장된 원문이 없어 기본 문항 또는 문항 ID를 표시합니다.
+                </p>
+              )}
               <AnswerReview
                 answer={row.answer}
                 evaluation={row.evaluation}

@@ -95,6 +95,7 @@ class InterviewEntry(BaseModel):
     answer: str
     score: int
     evaluation: Evaluation | None
+    original_question_saved: bool
 
 
 class InterviewHistory(BaseModel):

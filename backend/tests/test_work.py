@@ -71,6 +71,20 @@ def test_approved_work_runs_in_an_isolated_checkout(tmp_path, monkeypatch, with_
         )
         assert client.post("/api/v1/session", json=member).status_code == 200
         assert client.get(url).status_code == 403
+        if with_images:
+            draft = {"employee_id": "LT-007", "title": "UI", "prompt": "작업 내용"}
+            assert client.post(url, json=draft).status_code == 403
+            assert (
+                client.post(
+                    url + "/with-images",
+                    data=draft,
+                    files={"images": ("reference.png", b"untrusted", "image/png")},
+                ).status_code
+                == 403
+            )
+            assert client.post(url + "/1/approve").status_code == 403
+            assert client.get(url + "/1/patch").status_code == 403
+            assert client.get(url + "/1/images/1").status_code == 403
         username, _ = provision(engine, "LT-SYS-001", "password-1234")
         assert (
             client.post(
@@ -139,5 +153,15 @@ def test_approved_work_runs_in_an_isolated_checkout(tmp_path, monkeypatch, with_
         with engine.connect() as db:
             assert list(db.scalars(text("SELECT state FROM llm_usage"))) == ["settled"]
         if with_images:
+            with engine.begin() as db:
+                db.execute(
+                    text("UPDATE accounts SET role='member' WHERE username=:name"),
+                    {"name": username},
+                )
+            assert client.get("/api/v1/session").json()["role"] == "member"
+            assert client.post(url, json=draft).status_code == 403
+            assert client.post(assignment + "/approve").status_code == 403
+            assert client.get(assignment + "/patch").status_code == 403
+            assert client.get(assignment + "/images/1").status_code == 403
             assert client.delete("/api/v1/session").status_code == 204
             assert client.get(assignment + "/images/1").status_code == 401

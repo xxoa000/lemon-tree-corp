@@ -13,6 +13,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.database import create_workplace_engine, migration_connection
 
 TABLES = ("tasks", "task_events", "accounts", "job_applications", "job_answers")
+QUESTIONS = "job_questions"
+QUESTION_KEY = ("application_id", "question_id")
 TIMESTAMPS = {"task_events": "occurred_at", "job_applications": "created_at"}
 SEED = import_module("migrations.versions.0001_workplace_tasks").SEED_TASKS
 TASK_FIELDS = ("id", "title", "description", "assignee_id", "status")
@@ -45,13 +47,27 @@ def load_source(path: Path) -> dict[str, list[dict]]:
                     row[field] = datetime.fromisoformat(row[field])
             source[name] = rows
 
+        exists = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            (QUESTIONS,),
+        ).fetchone()
+        if exists:
+            source[QUESTIONS] = [
+                dict(row)
+                for row in db.execute(
+                    "SELECT * FROM job_questions ORDER BY application_id, question_id"
+                )
+            ]
+
     accounts = {f"acct:{row['id']}" for row in source["accounts"]}
     applications = {row["id"] for row in source["job_applications"]}
     if any(
         row["applicant"] not in accounts and row["applicant"] != "LT-011"
         for row in source["job_applications"]
     ) or any(
-        row["application_id"] not in applications for row in source["job_answers"]
+        row["application_id"] not in applications
+        for name in ("job_answers", QUESTIONS)
+        for row in source.get(name, [])
     ):
         raise ValueError("SQLite 지원 내역에 연결된 계정 또는 지원 건이 없습니다.")
     return source
@@ -125,13 +141,23 @@ def remap_seeded_accounts(
 def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> None:
     """식별자와 제약 조건을 확인하고 적용 모드에서만 대상에 씁니다."""
     revision = db.scalar(text("SELECT version_num FROM alembic_version"))
-    if revision not in {"0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010"}:
+    if revision not in {f"{number:04d}" for number in range(3, 13)}:
         raise ValueError(
-            "대상 MySQL에 지원하는 Alembic 리비전(0003~0010)을 먼저 적용하세요."
+            "대상 MySQL에 지원하는 Alembic 리비전(0003~0012)을 먼저 적용하세요."
         )
 
+    schema = int(revision)
+    if schema < 10 and source.get(QUESTIONS):
+        raise ValueError(
+            "생성한 면접 질문도 복사하려면 대상에 Alembic 0010 이상을 적용하세요."
+        )
+    if schema < 9 and any(row.get("evaluation") for row in source["job_answers"]):
+        raise ValueError(
+            "면접 피드백도 복사하려면 대상에 Alembic 0009 이상을 적용하세요."
+        )
+    names = (*TABLES, QUESTIONS) if schema >= 10 and QUESTIONS in source else TABLES
     metadata = MetaData()
-    tables = {name: Table(name, metadata, autoload_with=db) for name in TABLES}
+    tables = {name: Table(name, metadata, autoload_with=db) for name in names}
     engines = {
         name: engine
         for name, engine in db.execute(
@@ -140,35 +166,27 @@ def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> Non
             )
         )
     }
-    if any(engines.get(name) != "InnoDB" for name in TABLES):
+    if any(engines.get(name) != "InnoDB" for name in names):
         raise ValueError("대상 업무 테이블이 모두 InnoDB여야 합니다.")
 
-    if revision in {"0005", "0006", "0007", "0008", "0009", "0010"}:
+    if schema >= 5:
         source = remap_seeded_accounts(db, tables["accounts"], source)
 
     task_events = tables["task_events"]
     changed_tasks = set(db.scalars(select(task_events.c.task_id)))
     for name, table in tables.items():
+        fields = QUESTION_KEY if name == QUESTIONS else ("id",)
         existing = {
-            row["id"]: dict(row) for row in db.execute(select(table)).mappings()
+            tuple(row[field] for field in fields): dict(row)
+            for row in db.execute(select(table)).mappings()
         }
         inserted, updated = [], []
         skipped = 0
         for original in source[name]:
             row = original
-            if (
-                name == "tasks"
-                and revision in {"0006", "0007", "0008", "0009", "0010"}
-                and row["assignee_id"] == "LT-011"
-            ):
+            if name == "tasks" and schema >= 6 and row["assignee_id"] == "LT-011":
                 row = {**row, "assignee_id": ""}
-            if name == "accounts" and revision in {
-                "0004",
-                "0005",
-                "0006",
-                "0007",
-                "0008",
-            }:
+            if name == "accounts" and schema >= 4:
                 row = {
                     "role": "member",
                     "employee_id": None,
@@ -178,24 +196,16 @@ def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> Non
                     "avatar": None,
                     **row,
                 }
-            if (
-                name == "job_answers"
-                and revision in {"0009", "0010"}
-                and "evaluation" not in row
-            ):
+            if name == "job_answers" and schema >= 9 and "evaluation" not in row:
                 row = {**row, "evaluation": None}
             if set(row) != set(table.c.keys()):
                 raise ValueError(
                     f"{name}: 대상 DB와 백업의 컬럼이 다릅니다. 대상 스키마를 업데이트하세요."
                 )
-            key = row["id"]
+            key = tuple(row[field] for field in fields)
             current = existing.get(key)
-            seed = SEED_ROWS.get(key) if name == "tasks" else None
-            if (
-                seed
-                and revision in {"0006", "0007", "0008", "0009", "0010"}
-                and seed["assignee_id"] == "LT-011"
-            ):
+            seed = SEED_ROWS.get(row["id"]) if name == "tasks" else None
+            if seed and schema >= 6 and seed["assignee_id"] == "LT-011":
                 seed = {**seed, "assignee_id": ""}
             if current == row:
                 skipped += 1
@@ -223,15 +233,24 @@ def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> Non
                         f"{name}: 대상 DB의 고유값이 충돌합니다. 이전을 중단합니다."
                     )
                 inserted.append(row)
-            elif (name == "tasks" and current == seed and key not in changed_tasks) or (
-                name == "accounts"
-                and current.get("employee_id") is not None
-                and current["password_hash"] in (None, "!")
-                and all(
-                    current[field] == row[field]
-                    for field in ("employee_id", "username", "role")
+            elif (
+                (name == "tasks" and current == seed and key not in changed_tasks)
+                or (
+                    name == "accounts"
+                    and current.get("employee_id") is not None
+                    and current["password_hash"] in (None, "!")
+                    and all(
+                        current[field] == row[field]
+                        for field in ("employee_id", "username", "role")
+                    )
+                    and not (current["phone"] or current["bio"] or current["avatar"])
                 )
-                and not (current["phone"] or current["bio"] or current["avatar"])
+                or (
+                    name == "job_answers"
+                    and current.get("evaluation") is None
+                    and bool(row.get("evaluation"))
+                    and current == {**row, "evaluation": None}
+                )
             ):
                 updated.append(row)
             else:
@@ -243,10 +262,11 @@ def copy_rows(db: Connection, source: dict[str, list[dict]], apply: bool) -> Non
             if inserted:
                 db.execute(table.insert(), inserted)
             for row in updated:
-                values = {key: value for key, value in row.items() if key != "id"}
-                db.execute(table.update().where(table.c.id == row["id"]).values(values))
+                values = {key: value for key, value in row.items() if key not in fields}
+                condition = [table.c[field] == row[field] for field in fields]
+                db.execute(table.update().where(*condition).values(values))
         print(
-            f"{name}: 추가 {len(inserted)}, 초기 데이터 갱신 {len(updated)}, 동일 {skipped}"
+            f"{name}: 추가 {len(inserted)}, 기존 데이터 보완 {len(updated)}, 동일 {skipped}"
         )
 
 

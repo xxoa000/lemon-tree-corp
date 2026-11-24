@@ -82,11 +82,17 @@
   @apply flex items-center gap-2;
 }
 
-.account button {
+.account button,
+.account a {
   @apply bg-white;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 7px 10px;
+}
+
+.account a {
+  color: inherit;
+  text-decoration: none;
 }
 
 .account .talk {
@@ -246,8 +252,4 @@ dialog.resume-dialog {
   position: sticky;
   top: 0;
   z-index: 1;
-}
-
-dialog:has(#dialog-heading[data-wide='true']) {
-  width: min(840px, calc(100% - 24px));
 }
